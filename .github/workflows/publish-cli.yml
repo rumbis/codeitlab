@@ -1,0 +1,80 @@
+name: Publish CLI to npm
+
+# Publishes the `codeitlab` npm launcher package. This is deliberately separate
+# from release.yml: it needs no signing secrets or hosted-app vars, so it can
+# ship the CLI on its own.
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Version to publish (must match apps/server/package.json or the release you built)"
+        required: true
+        type: string
+      dist_tag:
+        description: "npm dist-tag"
+        required: false
+        default: latest
+        type: string
+  push:
+    tags:
+      - "cli-v*"
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: publish-cli-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    name: Publish codeitlab to npm
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Setup Vite+
+        uses: voidzero-dev/setup-vp@v1
+        with:
+          node-version-file: package.json
+          cache: true
+          run-install: |
+            args:
+              - --filter=t3...
+              - --filter=@t3tools/scripts...
+
+      - name: Resolve version and dist-tag
+        id: meta
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+            version="${{ inputs.version }}"
+            tag="${{ inputs.dist_tag }}"
+          else
+            version="${GITHUB_REF_NAME#cli-v}"
+            tag="latest"
+          fi
+          [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+([-+][0-9A-Za-z.-]+)?$ ]] || {
+            echo "::error::Not a valid semver version: $version"
+            exit 1
+          }
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+
+      - name: Build the CodeitLab CLI launcher
+        run: |
+          node scripts/build-npm-launcher.ts build-codeitlab-cli-package \
+            --version "${{ steps.meta.outputs.version }}" \
+            --output-dir npm-packages
+
+      - name: Publish to npm (trusted publishing)
+        run: |
+          node apps/server/scripts/cli.ts publish \
+            --package-name codeitlab \
+            --packages-dir npm-packages \
+            --tag "${{ steps.meta.outputs.tag }}" \
+            --provenance --verbose

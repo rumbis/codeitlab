@@ -1,0 +1,42 @@
+<svg width="1024" height="1024" viewBox="0 0 1024 1024" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <!-- CodeitLab original mark: phosphor ring, cyan node core, circuit trace. -->
+  <defs>
+    <linearGradient id="body" x1="512" y1="0" x2="512" y2="1024" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#0b1214" />
+      <stop offset="1" stop-color="#030506" />
+    </linearGradient>
+    <radialGradient id="ambient" cx="0" cy="0" r="1" gradientTransform="translate(512 512) rotate(90) scale(430)" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#3dff9e" stop-opacity="0.16" />
+      <stop offset="1" stop-color="#3dff9e" stop-opacity="0" />
+    </radialGradient>
+    <pattern id="grid" width="64" height="64" patternUnits="userSpaceOnUse">
+      <path d="M64 0H0V64" stroke="#3dff9e" stroke-opacity="0.08" stroke-width="1.5" fill="none" />
+    </pattern>
+    <clipPath id="squircle">
+      <rect width="1024" height="1024" rx="230" />
+    </clipPath>
+    <filter id="glow" x="-40%" y="-40%" width="180%" height="180%">
+      <feGaussianBlur stdDeviation="22" />
+    </filter>
+  </defs>
+
+  <g clip-path="url(#squircle)">
+    <rect width="1024" height="1024" fill="url(#body)" />
+    <rect width="1024" height="1024" fill="url(#ambient)" />
+    <rect width="1024" height="1024" fill="url(#grid)" />
+    <rect x="2" y="2" width="1020" height="1020" rx="228" stroke="#3dff9e" stroke-opacity="0.28" stroke-width="4" />
+
+    <!-- ambient glow of the mark -->
+    <path d="M635.6 306.3A240 240 0 1 1 613.4 294.5" stroke="#3dff9e" stroke-opacity="0.45" stroke-width="120" stroke-linecap="round" filter="url(#glow)" />
+
+    <!-- phosphor ring with a small gap at the top-right -->
+    <path d="M635.6 306.3A240 240 0 1 1 613.4 294.5" stroke="#3dff9e" stroke-width="62" stroke-linecap="round" />
+
+    <!-- cyan hexagonal node core -->
+    <path d="M512 405L604.7 458.5V565.5L512 619L419.3 565.5V458.5L512 405Z" stroke="#22d3ee" stroke-width="30" stroke-linejoin="round" />
+
+    <!-- circuit trace out through the ring gap -->
+    <path d="M562.2 417.5L673 209" stroke="#22d3ee" stroke-width="27" stroke-linecap="round" />
+    <circle cx="673" cy="209" r="35" fill="#22d3ee" />
+  </g>
+</svg>
