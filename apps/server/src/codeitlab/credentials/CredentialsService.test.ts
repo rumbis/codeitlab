@@ -118,6 +118,20 @@ describe("CredentialsService", () => {
     ),
   );
 
+  it.effect("blocks a model-only finding when blockOnModelFlag is on", () =>
+    withHarness(({ make }) =>
+      Effect.gen(function* () {
+        const handle = yield* make({ blockOnModelFlag: true });
+        const result = yield* handle.service.scan({
+          text: "the password is QwErTyUiOpAsDfGhJkLzXcVbNm",
+        });
+        expect(result.blocked).toBe(true);
+        expect(result.masked).not.toContain("QwErTyUiOpAsDfGhJkLzXcVbNm");
+        yield* handle.close;
+      }),
+    ),
+  );
+
   it.effect("downloads a newer local model and keeps the bundled one on a bad file", () =>
     withHarness(({ make }) =>
       Effect.gen(function* () {

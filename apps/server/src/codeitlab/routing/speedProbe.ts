@@ -3,6 +3,7 @@ import type { ProviderTextGeneration } from "@t3tools/provider-core/server/textG
 import type { ProviderInstanceId, ServerProviderModel } from "@t3tools/contracts";
 import * as Cause from "effect/Cause";
 import * as Clock from "effect/Clock";
+import type * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 
@@ -61,6 +62,13 @@ export interface ProbeInstanceModelSpeedInput {
   readonly cwd: string;
   readonly instanceId: ProviderInstanceId;
   readonly model: string;
+  /**
+   * Deep scans measure thousands of models, so they skip the immediate retry
+   * and use a shorter per-model timeout: one failed "hi" is enough evidence
+   * that the model is not usable right now.
+   */
+  readonly retry?: boolean;
+  readonly timeout?: Duration.Input;
 }
 
 const describeFailure = (cause: Cause.Cause<unknown>): string => {
@@ -80,7 +88,7 @@ const attemptSpeedProbe = Effect.fn("codeitlab.routing.attemptSpeedProbe")(funct
       message: SPEED_PROBE_MESSAGE,
       modelSelection: { instanceId: input.instanceId, model: input.model },
     })
-    .pipe(Effect.timeout(SPEED_PROBE_TIMEOUT), Effect.exit);
+    .pipe(Effect.timeout(input.timeout ?? SPEED_PROBE_TIMEOUT), Effect.exit);
   const latencyMs = (yield* Clock.currentTimeMillis) - startedAtMs;
   return { latencyMs, exit };
 });
@@ -95,6 +103,14 @@ export const probeInstanceModelSpeed = Effect.fn("codeitlab.routing.probeInstanc
     const first = yield* attemptSpeedProbe(input);
     if (Exit.isSuccess(first.exit)) {
       return { model: input.model, latencyMs: first.latencyMs, ok: true };
+    }
+    if (input.retry === false) {
+      return {
+        model: input.model,
+        latencyMs: first.latencyMs,
+        ok: false,
+        error: describeFailure(first.exit.cause),
+      };
     }
     const retry = yield* attemptSpeedProbe(input);
     if (Exit.isSuccess(retry.exit)) {

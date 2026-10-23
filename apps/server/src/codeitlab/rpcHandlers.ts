@@ -266,7 +266,11 @@ export const makeCodeitlabRpcHandlers: Effect.Effect<
       }),
     "codeitlab.routing.history": (input) => routing.history(input.limit),
     "codeitlab.routing.health": () => routing.health,
-    "codeitlab.routing.checkHealth": () => routing.checkHealth,
+    // A manual check also kicks the deep model scan: the first-run wizard and
+    // the Routing page's "Check now" must discover every advertised model, not
+    // only the light probe's shortlist.
+    "codeitlab.routing.checkHealth": () =>
+      routing.checkHealth.pipe(Effect.andThen(routing.scanModels)),
     "codeitlab.policy.effective": (input) =>
       policy.effective(
         input.providerInstanceId === undefined

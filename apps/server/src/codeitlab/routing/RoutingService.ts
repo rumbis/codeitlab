@@ -20,6 +20,7 @@ import * as Crypto from "effect/Crypto";
 import * as DateTime from "effect/DateTime";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
+import * as Fiber from "effect/Fiber";
 import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
@@ -51,6 +52,15 @@ import {
   type SpeedProbeResult,
 } from "./speedProbe.ts";
 import { isProviderCoolingDown } from "./providerFailures.ts";
+import {
+  clampDeepScanConcurrency,
+  clampDeepScanTimeoutSeconds,
+  DEEP_SCAN_REFRESH_MS,
+  deepScanFingerprint,
+  deepScanModelSlugs,
+  rankTestedModels,
+  rankTestedModelsByDefault,
+} from "./deepScan.ts";
 import {
   discoverOmniRouteModels,
   OMNIROUTE_VIRTUAL_MODEL_BY_TASK,
@@ -175,6 +185,20 @@ export const make = Effect.fn("codeitlab.routing.service.make")(function* () {
   const registry = yield* ProviderInstanceRegistry.ProviderInstanceRegistry;
   const crypto = yield* Crypto.Crypto;
   const environment = yield* HostProcess.Environment;
+  // The deep scan outlives a single RPC. Forking it into the service's own
+  // scope ties it to the layer lifetime, so the fiber is interrupted before the
+  // layer's dependencies (state directory, providers) are torn down.
+  const serviceScope = yield* Effect.scope;
+  const deepScanFiber = yield* Ref.make<Fiber.Fiber<unknown> | undefined>(undefined);
+  // Await the scan fiber before the layer (and its state directory) goes away;
+  // an interrupted fiber can otherwise finish one last health.json write while
+  // the directory is already being removed.
+  yield* Effect.addFinalizer(() =>
+    Effect.gen(function* () {
+      const fiber = yield* Ref.get(deepScanFiber);
+      if (fiber !== undefined) yield* Fiber.interrupt(fiber);
+    }),
+  );
 
   const historyDirectory = path.join(config.stateDir, "codeitlab", "routing");
   const historyPath = path.join(historyDirectory, "history.jsonl");
@@ -184,6 +208,7 @@ export const make = Effect.fn("codeitlab.routing.service.make")(function* () {
   const healthRef = yield* Ref.make<RoutingHealth | undefined>(undefined);
   const historyLock = yield* Semaphore.make(1);
   const healthLock = yield* Semaphore.make(1);
+  const deepScanRunning = yield* Ref.make(false);
   const omniRouteCache = yield* Ref.make<
     { readonly discovery: OmniRouteDiscovery; readonly atMs: number } | undefined
   >(undefined);
@@ -254,22 +279,52 @@ export const make = Effect.fn("codeitlab.routing.service.make")(function* () {
     );
 
   const recordFallback = Effect.fn("codeitlab.routing.recordFallback")(function* (input: {
-    readonly decisionId: string;
+    readonly decisionId?: string;
     readonly fromInstanceId: string;
     readonly toInstanceId: string;
     readonly toModel: string;
   }) {
     const entries = yield* Ref.get(historyRef);
-    const index = entries.findIndex((entry) => entry.id === input.decisionId);
-    if (index === -1) return;
     const note = ` Fell back to ${input.toInstanceId}/${input.toModel} because ${input.fromInstanceId} failed.`;
+    if (input.decisionId === undefined) {
+      // No decision was recorded for this turn (the router could not pick any
+      // provider), so keep an explicit fallback decision in the history — the
+      // UI badge and the audit trail need a reason to show.
+      const synthetic: RoutingDecision = {
+        id: `route_fallback_${yield* crypto
+          .randomUUIDv7()
+          .pipe(
+            Effect.catchCause(() =>
+              Clock.currentTimeMillis.pipe(Effect.map((nowMs) => `${nowMs}`)),
+            ),
+          )}`,
+        decidedAt: DateTime.formatIso(DateTime.makeUnsafe(yield* Clock.currentTimeMillis)),
+        taskClass: "coding",
+        providerInstanceId: input.toInstanceId,
+        providerKind: "",
+        model: input.toModel,
+        reason: note.trim(),
+        candidates: [],
+        enforced: true,
+      };
+      yield* persistHistory([...entries, synthetic]);
+      yield* Effect.logInfo("CodeitLab recorded a fallback decision.", {
+        decisionId: synthetic.id,
+        fromInstanceId: input.fromInstanceId,
+        toInstanceId: input.toInstanceId,
+        toModel: input.toModel,
+      });
+      return;
+    }
+    const index = entries.findIndex((entry) => entry.id === input.decisionId);
+    if (index < 0) return;
     const existing = entries[index];
     if (existing === undefined || existing.reason.includes(note.trim())) return;
     const updated = [...entries];
     updated[index] = { ...existing, reason: `${existing.reason}${note}` };
     yield* persistHistory(updated);
     yield* Effect.logInfo("CodeitLab routing decision annotated with the fallback.", {
-      decisionId: input.decisionId,
+      decisionId: updated[index]?.id,
       fromInstanceId: input.fromInstanceId,
       toInstanceId: input.toInstanceId,
       toModel: input.toModel,
@@ -497,20 +552,36 @@ export const make = Effect.fn("codeitlab.routing.service.make")(function* () {
       };
       const health: RoutingHealth = {
         ...input.base,
-        entries: input.base.entries.map((entry) => ({
-          ...entry,
-          speeds: [],
-          speedProbe: { status: "off", startedAt, finishedAt: startedAt, checked: 0, total: 0 },
-        })),
+        entries: input.base.entries.map((entry) =>
+          // A deep scan is an explicit, separate measurement: turning the light
+          // probe off must not throw away what the deep scan already learned.
+          entry.speedProbe?.mode === "deep" && (entry.speeds?.length ?? 0) > 0
+            ? entry
+            : {
+                ...entry,
+                speeds: [],
+                speedProbe: {
+                  status: "off",
+                  startedAt,
+                  finishedAt: startedAt,
+                  checked: 0,
+                  total: 0,
+                },
+              },
+        ),
         speedProbe: off,
       };
       yield* publishHealth(health);
       return health;
     }
 
+    const hasDeepData = (entry: RoutingHealthEntry | undefined): boolean =>
+      entry?.speedProbe?.mode === "deep" && (entry.speeds?.length ?? 0) > 0;
     const planned = input.instances.map((instance, index) => {
       const entry = input.base.entries[index];
-      if (entry === undefined || !entry.ok) return [];
+      // A deep scan already measured every advertised model for this provider;
+      // a light three-model probe on top would overwrite that evidence.
+      if (entry === undefined || !entry.ok || hasDeepData(entry)) return [];
       return selectProbeModels({
         models: instance.snapshot.models,
         providerKind: instance.driverKind,
@@ -520,6 +591,7 @@ export const make = Effect.fn("codeitlab.routing.service.make")(function* () {
     });
     const total = planned.reduce((sum, models) => sum + models.length, 0);
     const checkingEntries = input.base.entries.map((entry, index) => {
+      if (hasDeepData(entry)) return entry;
       const totalForProvider = planned[index]?.length ?? 0;
       return {
         ...entry,
@@ -576,16 +648,45 @@ export const make = Effect.fn("codeitlab.routing.service.make")(function* () {
     });
     const checked = entries.reduce((sum, entry) => sum + (entry.speedProbe?.checked ?? 0), 0);
     const failed = speedMeasurements(entries).filter((speed) => !speed.ok).length;
+    // The deep scan is the authoritative measurement when it exists: keep its
+    // aggregate (mode, ok/failed counts, totals) instead of reporting the
+    // three-model light probe as if it covered the whole catalog.
+    const deepEntries = entries.filter((entry) => entry.speedProbe?.mode === "deep");
+    const deep = deepEntries.length > 0;
+    const deepChecked = deepEntries.reduce(
+      (sum, entry) => sum + (entry.speedProbe?.checked ?? 0),
+      0,
+    );
+    const deepTotal = deepEntries.reduce((sum, entry) => sum + (entry.speedProbe?.total ?? 0), 0);
+    const deepOk = deepEntries.reduce(
+      (sum, entry) => sum + (entry.speeds ?? []).filter((speed) => speed.ok).length,
+      0,
+    );
+    const deepFailed = deepEntries.reduce(
+      (sum, entry) => sum + (entry.speeds ?? []).filter((speed) => !speed.ok).length,
+      0,
+    );
     const health: RoutingHealth = {
       ...input.base,
       entries,
-      speedProbe: {
-        status: speedProbeStatus({ checked, failed, total, timedOut }),
-        startedAt,
-        finishedAt,
-        checked,
-        total,
-      },
+      speedProbe: deep
+        ? {
+            status: deepFailed === 0 ? "done" : deepOk > 0 ? "partial" : "error",
+            mode: "deep",
+            startedAt,
+            finishedAt,
+            checked: deepChecked,
+            total: deepTotal,
+            okCount: deepOk,
+            failedCount: deepFailed,
+          }
+        : {
+            status: speedProbeStatus({ checked, failed, total, timedOut }),
+            startedAt,
+            finishedAt,
+            checked,
+            total,
+          },
     };
     yield* publishHealth(health);
     yield* Effect.logInfo("CodeitLab speed probe", {
@@ -595,6 +696,377 @@ export const make = Effect.fn("codeitlab.routing.service.make")(function* () {
       fastest: fastestMeasurement(entries) ?? null,
     });
     return health;
+  });
+
+  /**
+   * Deep model scan. The light probe measures a shortlist per provider on the
+   * schedule; a gateway like Hermes advertises thousands of custom models, and
+   * the router must know which of them answer and how fast before it can rank
+   * them per task. The scan measures every advertised model once, persists
+   * progress while it runs (so the Routing page can show `checked / total`),
+   * and only models that answered become routing candidates.
+   */
+  const runDeepScan = Effect.fn("codeitlab.routing.deepScan")(function* (input: {
+    readonly routing: RoutingSettings;
+    readonly instances: ReadonlyArray<InstanceSnapshot>;
+  }) {
+    const startedAt = formatIsoAt(yield* Clock.currentTimeMillis);
+    const concurrency = clampDeepScanConcurrency(input.routing.deepScanConcurrency);
+    const timeoutSeconds = clampDeepScanTimeoutSeconds(input.routing.deepScanTimeoutSeconds);
+    const timeout = Duration.seconds(timeoutSeconds);
+    const base = yield* Ref.get(healthRef);
+    if (base === undefined) return undefined;
+
+    const targets = input.instances.flatMap((instance) => {
+      const slugs = deepScanModelSlugs(instance.snapshot.models);
+      return slugs.length === 0
+        ? []
+        : [
+            {
+              instance,
+              slugs,
+              fingerprint: deepScanFingerprint(instance.snapshot.models),
+            },
+          ];
+    });
+    const total = targets.reduce((sum, target) => sum + target.slugs.length, 0);
+    if (total === 0) {
+      const health: RoutingHealth = {
+        ...base,
+        speedProbe: {
+          status: "off",
+          mode: "deep",
+          startedAt,
+          finishedAt: startedAt,
+          checked: 0,
+          total: 0,
+          okCount: 0,
+          failedCount: 0,
+        },
+      };
+      yield* publishHealth(health);
+      return health;
+    }
+
+    const entriesRef = yield* Ref.make<ReadonlyArray<RoutingHealthEntry>>(
+      base.entries.map((entry) => {
+        const target = targets.find(
+          (candidate) => candidate.instance.instanceId === entry.providerInstanceId,
+        );
+        if (target === undefined) return entry;
+        return {
+          ...entry,
+          speedProbe: {
+            status: "checking",
+            mode: "deep",
+            startedAt,
+            checked: 0,
+            total: target.slugs.length,
+            modelCount: target.slugs.length,
+            okCount: 0,
+            failedCount: 0,
+            fingerprint: target.fingerprint,
+          },
+        } satisfies RoutingHealthEntry;
+      }),
+    );
+    const aggregate = Effect.fn("codeitlab.routing.deepScan.aggregate")(function* (
+      status: SpeedProbeState["status"],
+      finishedAt?: string,
+    ) {
+      const entries = yield* Ref.get(entriesRef);
+      const deepEntries = entries.filter((entry) => entry.speedProbe?.mode === "deep");
+      const checked = deepEntries.reduce((sum, entry) => sum + (entry.speedProbe?.checked ?? 0), 0);
+      const okCount = deepEntries.reduce(
+        (sum, entry) => sum + (entry.speeds ?? []).filter((speed) => speed.ok).length,
+        0,
+      );
+      const failedCount = deepEntries.reduce(
+        (sum, entry) => sum + (entry.speeds ?? []).filter((speed) => !speed.ok).length,
+        0,
+      );
+      const health: RoutingHealth = {
+        ...base,
+        entries,
+        speedProbe: {
+          status,
+          mode: "deep",
+          startedAt,
+          ...(finishedAt === undefined ? {} : { finishedAt }),
+          checked,
+          total,
+          okCount,
+          failedCount,
+        },
+      };
+      yield* Ref.set(healthRef, health);
+      return health;
+    });
+    const publish = Effect.fn("codeitlab.routing.deepScan.publish")(function* (
+      status: SpeedProbeState["status"],
+      options?: { readonly persist?: boolean; readonly finishedAt?: string },
+    ) {
+      const health = yield* aggregate(status, options?.finishedAt);
+      if (options?.persist !== false) yield* persistCurrentHealth;
+      return health;
+    });
+
+    yield* publish("checking", { persist: true });
+    yield* Effect.logInfo("CodeItLab deep scan started", {
+      total,
+      providers: targets.length,
+      concurrency,
+      timeoutSeconds,
+    });
+
+    for (const target of targets) {
+      const providerInstanceId = ProviderInstanceId.make(target.instance.instanceId);
+      const liveInstance = yield* registry.getInstance(providerInstanceId);
+      const textGeneration = liveInstance?.textGeneration;
+      const speedsRef = yield* Ref.make<ReadonlyArray<SpeedMeasurement>>(
+        (
+          base.entries.find((entry) => entry.providerInstanceId === target.instance.instanceId)
+            ?.speeds ?? []
+        ).filter((speed) => target.slugs.includes(speed.model)),
+      );
+      const completed = yield* Ref.make(0);
+      yield* Effect.forEach(
+        target.slugs,
+        (model) =>
+          Effect.gen(function* () {
+            const measured =
+              textGeneration === undefined
+                ? ({
+                    model,
+                    latencyMs: 0,
+                    ok: false,
+                    error: "Provider instance is not available.",
+                  } satisfies SpeedProbeResult)
+                : yield* probeInstanceModelSpeed({
+                    textGeneration,
+                    cwd: config.cwd,
+                    instanceId: providerInstanceId,
+                    model,
+                    retry: false,
+                    timeout,
+                  });
+            const measurement: SpeedMeasurement = {
+              ...measured,
+              checkedAt: formatIsoAt(yield* Clock.currentTimeMillis),
+            };
+            const done = yield* Ref.updateAndGet(completed, (value) => value + 1);
+            yield* Ref.update(speedsRef, (current) => [
+              ...current.filter((speed) => speed.model !== model),
+              measurement,
+            ]);
+            const ordered = (yield* Ref.get(speedsRef))
+              .slice()
+              .sort((left, right) =>
+                left.ok === right.ok
+                  ? left.ok
+                    ? left.latencyMs - right.latencyMs
+                    : left.model.localeCompare(right.model)
+                  : left.ok
+                    ? -1
+                    : 1,
+              );
+            const okCount = ordered.filter((speed) => speed.ok).length;
+            yield* Ref.update(entriesRef, (entries) =>
+              entries.map((entry) =>
+                entry.providerInstanceId === target.instance.instanceId
+                  ? {
+                      ...entry,
+                      speeds: ordered,
+                      speedProbe: {
+                        status: "checking",
+                        mode: "deep",
+                        startedAt,
+                        checked: ordered.length,
+                        total: target.slugs.length,
+                        modelCount: target.slugs.length,
+                        okCount,
+                        failedCount: ordered.length - okCount,
+                        fingerprint: target.fingerprint,
+                      },
+                    }
+                  : entry,
+              ),
+            );
+            // Progress is cheap to publish in memory; the file write is
+            // throttled so a 2 000-model scan does not rewrite health.json
+            // 2 000 times.
+            const shouldPersist = done % 25 === 0 || done === target.slugs.length;
+            yield* publish("checking", { persist: shouldPersist });
+          }),
+        { concurrency, discard: true },
+      );
+
+      const finalSpeeds = (yield* Ref.get(speedsRef))
+        .slice()
+        .sort((left, right) =>
+          left.ok === right.ok
+            ? left.ok
+              ? left.latencyMs - right.latencyMs
+              : left.model.localeCompare(right.model)
+            : left.ok
+              ? -1
+              : 1,
+        );
+      const okCount = finalSpeeds.filter((speed) => speed.ok).length;
+      const failedCount = finalSpeeds.length - okCount;
+      const status: ProviderSpeedProbeState["status"] =
+        failedCount === 0 ? "done" : okCount > 0 ? "partial" : "error";
+      const finishedAt = formatIsoAt(yield* Clock.currentTimeMillis);
+      yield* Ref.update(entriesRef, (entries) =>
+        entries.map((entry) =>
+          entry.providerInstanceId === target.instance.instanceId
+            ? {
+                ...entry,
+                // A provider whose every advertised model failed the scan cannot
+                // serve a turn, even when its binary/login/quota checks passed.
+                ...(okCount === 0
+                  ? {
+                      ok: false,
+                      status: "error" as const,
+                      detail: entry.detail ?? "No advertised model answered the deep scan.",
+                    }
+                  : {}),
+                speeds: finalSpeeds,
+                speedProbe: {
+                  status,
+                  mode: "deep",
+                  startedAt,
+                  finishedAt,
+                  checked: finalSpeeds.length,
+                  total: target.slugs.length,
+                  modelCount: target.slugs.length,
+                  okCount,
+                  failedCount,
+                  fingerprint: target.fingerprint,
+                },
+              }
+            : entry,
+        ),
+      );
+      yield* publish("checking", { persist: true });
+      yield* Effect.logInfo("CodeitLab deep scan provider", {
+        providerInstanceId: target.instance.instanceId,
+        checked: finalSpeeds.length,
+        total: target.slugs.length,
+        ok: okCount,
+        failed: failedCount,
+      });
+    }
+
+    const entries = yield* Ref.get(entriesRef);
+    const deepEntries = entries.filter((entry) => entry.speedProbe?.mode === "deep");
+    const checked = deepEntries.reduce((sum, entry) => sum + (entry.speedProbe?.checked ?? 0), 0);
+    const okCount = deepEntries.reduce(
+      (sum, entry) => sum + (entry.speeds ?? []).filter((speed) => speed.ok).length,
+      0,
+    );
+    const failedCount = deepEntries.reduce(
+      (sum, entry) => sum + (entry.speeds ?? []).filter((speed) => !speed.ok).length,
+      0,
+    );
+    const finishedAt = formatIsoAt(yield* Clock.currentTimeMillis);
+    const status: SpeedProbeState["status"] =
+      failedCount === 0 ? "done" : okCount > 0 ? "partial" : "error";
+    const health: RoutingHealth = {
+      ...base,
+      entries,
+      speedProbe: {
+        status,
+        mode: "deep",
+        startedAt,
+        finishedAt,
+        checked,
+        total,
+        okCount,
+        failedCount,
+      },
+    };
+    yield* publishHealth(health);
+    yield* Effect.logInfo("CodeitLab deep scan complete", {
+      checked,
+      total,
+      ok: okCount,
+      failed: failedCount,
+      providers: targets.length,
+    });
+    return health;
+  });
+
+  /**
+   * Decide whether a deep scan is due and start it in the background. Manual
+   * checks force a scan; startup/scheduled checks only refresh when a provider's
+   * model list changed or the last scan is older than the refresh window.
+   */
+  const startDeepScan = Effect.fn("codeitlab.routing.startDeepScan")(function* (input: {
+    readonly routing: RoutingSettings;
+    readonly instances: ReadonlyArray<InstanceSnapshot>;
+    readonly force: boolean;
+  }) {
+    const current = yield* Ref.get(healthRef);
+    const nowMs = yield* Clock.currentTimeMillis;
+    if (!input.routing.deepScan) {
+      if (current === undefined) return undefined;
+      const startedAt = formatIsoAt(nowMs);
+      const entries = current.entries.map((entry) => ({
+        ...entry,
+        speedProbe: {
+          status: "off" as const,
+          mode: "deep" as const,
+          startedAt,
+          finishedAt: startedAt,
+          checked: 0,
+          total: 0,
+          okCount: 0,
+          failedCount: 0,
+          modelCount: entry.speedProbe?.modelCount ?? entry.models,
+        },
+      }));
+      const health: RoutingHealth = {
+        ...current,
+        entries,
+        speedProbe: {
+          status: "off",
+          mode: "deep",
+          startedAt,
+          finishedAt: startedAt,
+          checked: 0,
+          total: 0,
+          okCount: 0,
+          failedCount: 0,
+        },
+      };
+      yield* publishHealth(health);
+      return health;
+    }
+    if (yield* Ref.get(deepScanRunning)) return current;
+    const byInstance = healthByInstance(current?.entries);
+    const due = input.instances.some((instance) => {
+      const slugs = deepScanModelSlugs(instance.snapshot.models);
+      if (slugs.length === 0) return false;
+      const scan = byInstance.get(instance.instanceId)?.speedProbe;
+      if (scan?.mode !== "deep") return true;
+      if (scan.fingerprint !== deepScanFingerprint(instance.snapshot.models)) return true;
+      if (scan.status === "checking") return false;
+      const finishedAtMs = scan.finishedAt === undefined ? 0 : Date.parse(scan.finishedAt);
+      return !Number.isFinite(finishedAtMs) || nowMs - finishedAtMs > DEEP_SCAN_REFRESH_MS;
+    });
+    if (!input.force && !due) return current;
+    yield* Ref.set(deepScanRunning, true);
+    const fiber = yield* runDeepScan({
+      routing: input.routing,
+      instances: input.instances,
+    }).pipe(
+      Effect.ensuring(Ref.set(deepScanRunning, false)),
+      Effect.catchCause((cause) => Effect.logWarning("CodeItLab deep scan failed.", { cause })),
+      Effect.forkIn(serviceScope),
+    );
+    yield* Ref.set(deepScanFiber, fiber);
+    return yield* Ref.get(healthRef);
   });
 
   const runHealthCheck = Effect.fn("codeitlab.routing.healthCheck")(function* (
@@ -625,6 +1097,17 @@ export const make = Effect.fn("codeitlab.routing.service.make")(function* () {
   });
 
   const checkHealth = runHealthCheck("manual");
+
+  const scanModels = Effect.gen(function* () {
+    const current = yield* readSettings;
+    const instances = yield* readInstances;
+    const started = yield* startDeepScan({
+      routing: current.codeitlab.routing,
+      instances,
+      force: true,
+    });
+    return started ?? (yield* health);
+  });
 
   const readSettings = settings.getSettings.pipe(
     Effect.mapError(
@@ -711,10 +1194,13 @@ export const make = Effect.fn("codeitlab.routing.service.make")(function* () {
         providerInstanceId: instance.instanceId,
         providerKind: instance.driverKind,
         name: instance.displayName,
+        // The fallback pickers need the real list: a gateway can advertise
+        // thousands of models and truncating it here would hide the backup
+        // models the user is trying to choose.
         models: instance.snapshot.models
           .filter((model) => model.isLegacy !== true)
-          .map((model) => model.slug)
-          .slice(0, 50),
+          .map((model) => model.slug),
+        modelCount: instance.snapshot.models.filter((model) => model.isLegacy !== true).length,
         defaultModel: defaultModel(instance.snapshot.models)?.slug,
         available: providerIsAvailable(instance.enabled, instance.snapshot) && (entry?.ok ?? true),
         quota: entry?.quota ?? remainingQuota(instance.snapshot.usageLimits),
@@ -753,17 +1239,43 @@ export const make = Effect.fn("codeitlab.routing.service.make")(function* () {
       const quota = entry?.quota ?? remainingQuota(instance.snapshot.usageLimits);
       const coolingDown =
         options.fallbackEnabled !== false && isProviderCoolingDown(instance.instanceId);
+      const scan = entry?.speedProbe;
+      const measuredOk = (entry?.speeds ?? []).filter((speed) => speed.ok);
+      const deepDone = scan?.mode === "deep" && scan.status !== "checking";
       const providerAvailable =
         providerIsAvailable(instance.enabled, instance.snapshot) &&
         (entry?.ok ?? true) &&
         quota > 0 &&
-        !coolingDown;
-      const slugs = options.routePerTask
-        ? seedModelsForTask(instance.snapshot.models, instance.driverKind, taskClass)
-        : (() => {
-            const slug = defaultModel(instance.snapshot.models)?.slug;
-            return slug === undefined ? [] : [slug];
-          })();
+        !coolingDown &&
+        // A finished deep scan with no answering model means the provider
+        // cannot serve a turn, even though its quota/login look fine.
+        (measuredOk.length > 0 || !deepDone);
+      // After a deep scan, only models that answered the "hi" probe compete.
+      // Before any measurement (or while the scan is still warming up), fall
+      // back to the heuristic shortlist so the first turn stays routable.
+      const testedSlugs =
+        measuredOk.length > 0
+          ? options.routePerTask
+            ? rankTestedModels({
+                speeds: measuredOk,
+                providerKind: instance.driverKind,
+                taskClass,
+              })
+            : rankTestedModelsByDefault({
+                speeds: measuredOk,
+                providerKind: instance.driverKind,
+              })
+          : undefined;
+      const slugs =
+        testedSlugs ??
+        (deepDone
+          ? []
+          : options.routePerTask
+            ? seedModelsForTask(instance.snapshot.models, instance.driverKind, taskClass)
+            : (() => {
+                const slug = defaultModel(instance.snapshot.models)?.slug;
+                return slug === undefined ? [] : [slug];
+              })());
       if (slugs.length === 0) {
         return [
           {
@@ -878,6 +1390,26 @@ export const make = Effect.fn("codeitlab.routing.service.make")(function* () {
       : { ...input.decision, enforced: false, skipReason: verdict.skipReason };
   };
 
+  /**
+   * History keeps a bounded candidate list: a deep-scanned gateway can produce
+   * thousands of scored seeds, and a decision is not worth a megabyte of JSON.
+   * The winner is always included.
+   */
+  const MAX_DECISION_CANDIDATES = 25;
+  const boundedCandidates = (
+    all: ReadonlyArray<RoutingCandidate>,
+    chosen: RoutingCandidate,
+  ): ReadonlyArray<RoutingCandidate> => {
+    const top = all.slice(0, MAX_DECISION_CANDIDATES);
+    return top.some(
+      (candidate) =>
+        candidate.providerInstanceId === chosen.providerInstanceId &&
+        candidate.model === chosen.model,
+    )
+      ? top
+      : [chosen, ...top];
+  };
+
   const decide = Effect.fn("codeitlab.routing.decide")(function* (input: RoutingDecideInput) {
     const current = yield* readSettings;
     const routing = current.codeitlab.routing;
@@ -940,7 +1472,7 @@ export const make = Effect.fn("codeitlab.routing.service.make")(function* () {
         model: omniRouteCandidate.model,
         reason:
           `Task classified as ${classification.taskClass}; OmniRoute mode selected the gateway virtual model ${omniRouteCandidate.model}. ${discovery.error ?? ""}`.trim(),
-        candidates: [...candidates, omniRouteCandidate],
+        candidates: boundedCandidates([...candidates, omniRouteCandidate], omniRouteCandidate),
         omniRouteModel: omniRouteCandidate.model,
       };
       const enforcedDecision = withEnforcement({
@@ -1001,7 +1533,7 @@ export const make = Effect.fn("codeitlab.routing.service.make")(function* () {
               candidates,
               weights,
             }),
-      candidates,
+      candidates: boundedCandidates(candidates, chosen),
       ...(omniRouteCandidate === undefined ? {} : { omniRouteModel: omniRouteCandidate.model }),
     };
     const enforcedDecision = withEnforcement({
@@ -1026,6 +1558,23 @@ export const make = Effect.fn("codeitlab.routing.service.make")(function* () {
       Effect.map((entries) => [...entries].reverse().slice(0, Math.max(0, limit))),
     );
 
+  // Boot and scheduled checks also refresh the deep scan when the model list
+  // changed or the last scan is older than DEEP_SCAN_REFRESH_MS. The manual
+  // "Check now" path forces it through scanModels instead.
+  const scanIfDue = Effect.gen(function* () {
+    const current = yield* readSettings;
+    const instances = yield* readInstances;
+    yield* startDeepScan({
+      routing: current.codeitlab.routing,
+      instances,
+      force: false,
+    });
+  }).pipe(
+    Effect.catchCause((cause) =>
+      Effect.logWarning("The routing deep model scan failed.", { cause }),
+    ),
+  );
+
   // Probe once shortly after start so the panel has data without delaying boot,
   // then re-probe on the configured cadence (30 minutes by default).
   yield* Effect.gen(function* () {
@@ -1035,6 +1584,7 @@ export const make = Effect.fn("codeitlab.routing.service.make")(function* () {
         Effect.logWarning("The startup routing health check failed.", { cause }),
       ),
     );
+    yield* scanIfDue;
   }).pipe(Effect.forkScoped);
   yield* Effect.forever(
     Effect.gen(function* () {
@@ -1053,6 +1603,7 @@ export const make = Effect.fn("codeitlab.routing.service.make")(function* () {
           Effect.logWarning("The scheduled routing health check failed.", { cause }),
         ),
       );
+      yield* scanIfDue;
     }),
   ).pipe(Effect.forkScoped);
 
@@ -1062,6 +1613,7 @@ export const make = Effect.fn("codeitlab.routing.service.make")(function* () {
     history,
     health,
     checkHealth,
+    scanModels,
     recordFallback,
   });
   // The orchestrator dispatch path is built before the CodeitLab layer, so it

@@ -667,6 +667,92 @@ const withSpeedLayer = <A, E, R>(
     Effect.ensuring(Effect.sync(resetActiveRoutingService)),
   );
 
+describe("RoutingService (deep model scan)", () => {
+  it.effect("measures every advertised model and routes only tested models per task", () =>
+    Effect.gen(function* () {
+      const calls: Array<string> = [];
+      const layer = makeSpeedLayer(
+        "codeitlab-routing-deep-scan-",
+        {
+          mode: "auto",
+          recordHistory: false,
+          speedProbe: false,
+          deepScan: true,
+          deepScanConcurrency: 4,
+          deepScanTimeoutSeconds: 5,
+        },
+        [
+          speedInstance(
+            "claude",
+            "claudeAgent",
+            snapshot({
+              models: [
+                model("claude-opus-5", true),
+                model("claude-haiku"),
+                model("claude-sonnet-4"),
+                model("claude-broken"),
+              ],
+            }),
+            fakeTitleGeneration((input) => {
+              calls.push(input.modelSelection.model);
+              return input.modelSelection.model === "claude-broken"
+                ? Effect.fail(
+                    new TextGenerationError({
+                      operation: "generateThreadTitle",
+                      detail: "HTTP 404 model not found",
+                    }),
+                  )
+                : Effect.succeed({ title: "hi" });
+            }),
+          ),
+        ],
+      );
+      yield* withSpeedLayer(
+        layer,
+        Effect.gen(function* () {
+          const routing = yield* RoutingService;
+          yield* routing.scanModels;
+          let health = yield* routing.health;
+          for (
+            let attempt = 0;
+            attempt < 500 && health.entries[0]?.speedProbe?.status === "checking";
+            attempt += 1
+          ) {
+            yield* Effect.yieldNow;
+            health = yield* routing.health;
+          }
+          const entry = health.entries[0];
+          assert.strictEqual(entry?.speedProbe?.mode, "deep");
+          assert.strictEqual(entry?.speedProbe?.checked, 4);
+          assert.strictEqual(entry?.speedProbe?.okCount, 3);
+          assert.strictEqual(entry?.speedProbe?.failedCount, 1);
+          assert.strictEqual(health.speedProbe?.mode, "deep");
+          assert.strictEqual(calls.length, 4);
+
+          const coding = yield* routing.decide({
+            prompt: "implement a typescript endpoint and add tests",
+            projectId: null,
+            attachments: [],
+          });
+          assert.strictEqual(coding.model, "claude-opus-5");
+          assert.ok(
+            coding.candidates.every((candidate) => candidate.model !== "claude-broken"),
+            "a model that failed the deep scan must not be a candidate",
+          );
+
+          const fast = yield* routing.decide({
+            prompt: "tldr",
+            projectId: null,
+            attachments: [],
+          });
+          assert.notStrictEqual(fast.model, "claude-broken");
+          assert.ok(fast.candidates.length > 0);
+        }),
+      );
+    }),
+  );
+});
+
 describe("RoutingService (speed probe)", () => {
   it.effect("measures the probe models and feeds the latency into routing", () =>
     Effect.gen(function* () {
@@ -815,9 +901,11 @@ describe("RoutingService (speed probe)", () => {
             projectId: null,
             attachments: [],
           });
+          // A model the probe proved broken never competes again: routing only
+          // considers models that answered, so the failure cannot resurface.
           const haiku = decision.candidates.find((candidate) => candidate.model === "claude-haiku");
-          // A failed probe falls back to the coding heuristic instead of 0.
-          assert.strictEqual(haiku?.speed, 0.54);
+          assert.strictEqual(haiku, undefined);
+          assert.ok(decision.candidates.some((candidate) => candidate.model === "claude-opus-5"));
         }),
       );
     }),
@@ -972,6 +1060,26 @@ it.layer(
       assert.strictEqual(
         history.some((entry) => entry.id === "route_missing"),
         false,
+      );
+    }),
+  );
+
+  it.effect("appends a synthetic fallback decision when the router recorded none", () =>
+    Effect.gen(function* () {
+      const routing = yield* RoutingService;
+      yield* routing.recordFallback({
+        fromInstanceId: "primary",
+        toInstanceId: "backup",
+        toModel: "hermes-default",
+      });
+      const history = yield* routing.history(10);
+      const synthetic = history.find((entry) => entry.id.startsWith("route_fallback_"));
+      assert.ok(synthetic !== undefined);
+      assert.strictEqual(synthetic.providerInstanceId, "backup");
+      assert.strictEqual(synthetic.model, "hermes-default");
+      assert.strictEqual(
+        synthetic.reason,
+        "Fell back to backup/hermes-default because primary failed.",
       );
     }),
   );

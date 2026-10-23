@@ -45,6 +45,7 @@ import {
   driverSupportsAppContext,
   resolveCodeitlabInstructions,
 } from "../codeitlab/turnInjection.ts";
+import { guardProviderPrompt } from "../codeitlab/credentials/promptGuard.ts";
 import * as CheckpointService from "./CheckpointService.ts";
 import * as EventSink from "./EventSink.ts";
 import * as IdAllocator from "@t3tools/provider-core/server/IdAllocator";
@@ -1569,6 +1570,21 @@ export const layer: Layer.Layer<
           input.message.text.trim().toLowerCase() === "/compact"
             ? input.message
             : { ...input.message, text: `${codeitlabInstructions}\n\n${input.message.text}` };
+        // Privacy firewall: a prompt that is about to leave for a provider is
+        // masked here, after every local-only context injection, so no secret
+        // reaches the adapter. Block mode refuses the turn instead.
+        const credentialsSettings = yield* serverSettings.getSettings.pipe(
+          Effect.map((settings) => settings.codeitlab.credentials),
+          Effect.orElseSucceed(() => undefined),
+        );
+        const guardedPrompt =
+          credentialsSettings === undefined
+            ? undefined
+            : guardProviderPrompt(credentialsSettings, turnMessage.text);
+        const guardedMessage =
+          guardedPrompt === undefined || guardedPrompt.findings === 0
+            ? turnMessage
+            : { ...turnMessage, text: guardedPrompt.text };
         const turnInput = {
           appThread: input.appThread,
           threadId: input.run.threadId,
@@ -1586,7 +1602,7 @@ export const layer: Layer.Layer<
           attemptId: input.attemptId,
           rootNodeId: input.rootNode.id,
           providerThread: input.providerThread,
-          message: turnMessage,
+          message: guardedMessage,
           modelSelection: input.modelSelection,
           runtimePolicy: input.runtimePolicy,
           ...(turnAppContext.length === 0 ? {} : { appContext: turnAppContext }),
@@ -1605,18 +1621,31 @@ export const layer: Layer.Layer<
         const compact =
           input.message.attachments.length === 0 &&
           input.message.text.trim().toLowerCase() === "/compact";
-        const startTurn = compact
-          ? (input.session.compactThread?.(turnInput) ??
-            Effect.fail(
-              new ProviderAdapter.ProviderAdapterTurnStartError({
-                driver: input.session.driver,
-                threadId: input.run.threadId,
-                providerThreadId: input.providerThread.id,
-                runId: input.run.id,
-                cause: "This provider does not support context compaction.",
-              }),
-            ))
-          : input.session.startTurn(turnInput);
+        const startTurn =
+          guardedPrompt?.blocked === true
+            ? Effect.fail(
+                new ProviderAdapter.ProviderAdapterTurnStartError({
+                  driver: input.session.driver,
+                  threadId: input.run.threadId,
+                  providerThreadId: input.providerThread.id,
+                  runId: input.run.id,
+                  cause: new Error(
+                    "CodeitLab privacy firewall blocked this prompt: it contains a /private block and the firewall is set to block.",
+                  ),
+                }),
+              )
+            : compact
+              ? (input.session.compactThread?.(turnInput) ??
+                Effect.fail(
+                  new ProviderAdapter.ProviderAdapterTurnStartError({
+                    driver: input.session.driver,
+                    threadId: input.run.threadId,
+                    providerThreadId: input.providerThread.id,
+                    runId: input.run.id,
+                    cause: "This provider does not support context compaction.",
+                  }),
+                ))
+              : input.session.startTurn(turnInput);
         yield* Effect.andThen(shouldStart, startTurn).pipe(
           // Wait for acceptance so abandoned startup cannot leave a refresher
           // on the already-detached ingestion fiber.

@@ -423,12 +423,15 @@ export const makeCredentialsService = Effect.fn("codeitlab.credentials.service.m
       input.mode === undefined ? settings : { ...settings, mode: input.mode },
     );
     const result = maskText(input.text, options, vault);
+    const blocked =
+      result.blocked ||
+      (settings.blockOnModelFlag && result.findings.some((finding) => finding.source === "model"));
     yield* saveVault();
-    yield* recordActivity(settings, input.target ?? "preview", result.findings, result.blocked);
+    yield* recordActivity(settings, input.target ?? "preview", result.findings, blocked);
     return {
       masked: result.masked,
       findings: result.findings,
-      blocked: result.blocked,
+      blocked,
       privateBlocks: result.privateBlocks,
       modelUsed: result.modelUsed,
     } satisfies CodeitlabCredentialsScanResult;
@@ -519,6 +522,10 @@ export const makeCredentialsService = Effect.fn("codeitlab.credentials.service.m
         blocked = masked.blocked;
       }
     }
+
+    blocked =
+      blocked ||
+      (settings.blockOnModelFlag && findings.some((finding) => finding.source === "model"));
 
     yield* saveVault();
     yield* recordActivity(settings, "gateway", findings, blocked);

@@ -4,8 +4,8 @@ CodeitLab can keep secrets on the machine. When the proxy is on, every string
 the app is about to send to a provider is inspected locally first: API keys,
 passwords, tokens, private keys, connection strings, personal data and anything
 inside a `/private` block are replaced with **deterministic, format-preserving
-fakes**. The fake ↔ original map stays in the CodeItLab home, and the real
-values are put back in answers and tool output.
+fakes**. The fake ↔ original map stays in the CodeItLab home; for gateway
+traffic the real values are put back in answers and tool output.
 
 The design follows the same idea as [Latet](https://github.com/Latet-AI/latet)
 — a privacy firewall between the agent and the model — but it is implemented
@@ -21,6 +21,7 @@ It is **opt-in** (off by default) and lives at
 | Personal data | Emails, phone numbers (E.164), IBANs (checksum-validated) and card numbers (Luhn-validated). On in `balanced`, off in `secrets`, plus private IP ranges in `max`.                                                                                                                                  |
 | `/private`    | `/private … /private`, `[private] … [/private]`, `<private> … </private>`. In `mask` mode the content becomes a placeholder; in `block` mode the whole request is refused.                                                                                                                         |
 | Tiny model    | The smallest local model that can check credentials: a hashed character n-gram logistic regression with **8,233 int8 weights** (~40 KB of source). It runs on tokens the patterns miss and is trained to stay quiet on git SHAs, checksums, UUIDs and identifiers. No runtime, no GPU, no network. |
+| App turns     | Built-in provider turns are masked in the dispatch path (`RunExecutionService`) after every local-only context injection, so the prompt the adapter receives never contains a secret. In `block` mode a turn whose prompt contains a `/private` block fails before the provider is started.        |
 
 Fakes preserve the shape that matters to code: an `sk-proj-` key keeps its
 prefix and length, a JWT keeps three segments, an IBAN keeps its country and
@@ -52,7 +53,12 @@ and code the model writes still lines up.
    response — including streamed `text/event-stream` responses.
 4. **Download smallest model** — fetches the newest weights into the CodeItLab
    home (SHA-256 recorded) and keeps the bundled copy as the offline fallback.
+   The default URL is a GitHub release asset; if it is not published yet the
+   button reports the fetch failure and the bundled model keeps working.
    `CODEITLAB_CREDENTIALS_MODEL_URL` overrides the URL for self-hosted builds.
+5. **Nothing else to configure** — with the firewall on, app-driven turns are
+   masked automatically. The provider sees only fakes; the real values stay in
+   the local vault.
 
 ## Where the code lives
 
@@ -75,9 +81,19 @@ and code the model writes still lines up.
   that never names a credential ("Mark from sales is interviewing") is not
   detected; a local LLM reviewer is the planned follow-up for that class, and
   the `reviewerUrl`/`reviewerModel` settings fields are reserved for it.
-- App-driven provider turns still go through the provider adapters; the gateway
-  is the path that covers CLI agents' own HTTP calls today. Wiring the app's
-  own turn prompt/response through the same engine is the next step, and the
-  service API (`scan` / `restore`) is already shaped for it.
-- Fakes are not cryptographic secrets: they are deterministic placeholders
-  keyed by the local vault key. They must not be treated as credentials.
+- App-driven turns mask the outgoing prompt (the critical direction) but do not
+  restore fakes in streamed provider output yet: a model that echoes a fake shows
+  the fake. Restoring the response stream is the next step; the gateway already
+  restores responses for HTTP clients.
+- App-turn fakes use their own deterministic namespace (`codeitlab-app-turn-fakes-v1`)
+  rather than the vault-keyed namespace the gateway and preview use, because the
+  dispatch path deliberately avoids the credentials service and its key file.
+  Values stay stable per value across turns and restarts.
+- App-turn scans are not added to the audit list (the dispatch path has no
+  credentials service); the counters and audit cover preview scans and gateway
+  traffic.
+- App turns always use the bundled model; a downloaded model updates the
+  preview scan and the gateway, not the provider dispatch path. That keeps the
+  dispatch path free of downloads and file reads.
+- Fakes are not cryptographic secrets: they are deterministic placeholders.
+  They must not be treated as credentials.

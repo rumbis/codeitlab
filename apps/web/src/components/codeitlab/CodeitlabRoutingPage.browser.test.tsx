@@ -163,6 +163,9 @@ function routingSettings(overrides: Partial<CodeitlabRoutingSettings> = {}): {
       healthCheckMinutes: 30,
       speedProbe: true,
       speedProbeModelsPerProvider: 3,
+      deepScan: true,
+      deepScanConcurrency: 8,
+      deepScanTimeoutSeconds: 12,
       fallbackOnProviderFailure: true,
       fallbackInstanceId: "",
       fallbackModel: "",
@@ -177,6 +180,80 @@ function routingSettings(overrides: Partial<CodeitlabRoutingSettings> = {}): {
     },
   };
 }
+
+const deepCheckingHealth: RoutingHealth = {
+  checkedAt: CHECKED_AT,
+  intervalMinutes: 30,
+  nextCheckAt: "2026-10-23T04:30:00.000Z",
+  source: "manual",
+  speedProbe: {
+    status: "checking",
+    mode: "deep",
+    startedAt: CHECKED_AT,
+    checked: 420,
+    total: 2_210,
+    okCount: 300,
+    failedCount: 120,
+  },
+  entries: [
+    entry({
+      providerInstanceId: "hermes",
+      providerKind: "acpRegistry",
+      name: "Hermes",
+      quota: 0.72,
+      models: 2_210,
+      speedProbe: {
+        status: "checking",
+        mode: "deep",
+        startedAt: CHECKED_AT,
+        checked: 420,
+        total: 2_210,
+        modelCount: 2_210,
+        okCount: 300,
+        failedCount: 120,
+      },
+      speeds: [],
+    }),
+  ],
+};
+
+const deepFinishedHealth: RoutingHealth = {
+  checkedAt: CHECKED_AT,
+  intervalMinutes: 30,
+  nextCheckAt: "2026-10-23T04:30:00.000Z",
+  source: "manual",
+  speedProbe: {
+    status: "done",
+    mode: "deep",
+    startedAt: CHECKED_AT,
+    finishedAt: CHECKED_AT,
+    checked: 2_210,
+    total: 2_210,
+    okCount: 1_900,
+    failedCount: 310,
+  },
+  entries: [
+    entry({
+      providerInstanceId: "hermes",
+      providerKind: "acpRegistry",
+      name: "Hermes",
+      quota: 0.72,
+      models: 2_210,
+      speedProbe: {
+        status: "done",
+        mode: "deep",
+        startedAt: CHECKED_AT,
+        finishedAt: CHECKED_AT,
+        checked: 2_210,
+        total: 2_210,
+        modelCount: 2_210,
+        okCount: 1_900,
+        failedCount: 310,
+      },
+      speeds: [speed("deepseek-v4", 640), speed("broken-model", 12_000, false, "HTTP 404")],
+    }),
+  ],
+};
 
 function catalog(): RoutingCatalog {
   return { mode: "auto", providers: [], omniRouteModels: [] };
@@ -330,6 +407,74 @@ describe("CodeitlabRoutingPage speed probe", () => {
     );
     expect(toggle?.getAttribute("aria-checked")).toBe("false");
     expect(count?.hasAttribute("disabled")).toBe(true);
+  });
+
+  it("shows deep-scan progress with measured/failed counts while it runs", async () => {
+    setup({ health: deepCheckingHealth });
+    await using screen = await renderUi(<CodeitlabRoutingPage />);
+
+    const banner = screen.container.querySelector<HTMLElement>(
+      '[data-codeitlab-speed-probe="deep"]',
+    );
+    expect(banner).not.toBeNull();
+    expect(banner?.textContent).toContain("Scanning every advertised model…");
+    expect(banner?.getAttribute("data-speed-probe-checked")).toBe("420");
+    expect(banner?.getAttribute("data-speed-probe-total")).toBe("2210");
+    expect(banner?.getAttribute("data-speed-probe-ok")).toBe("300");
+    expect(banner?.getAttribute("data-speed-probe-failed")).toBe("120");
+    expect(banner?.getAttribute("data-speed-probe-providers")).toBe("1");
+    expect(banner?.textContent).toContain("300 available");
+    expect(banner?.textContent).toContain("120 failed");
+    expect(query('[data-codeitlab-speed-probe="checking"]')).toBeNull();
+  });
+
+  it("summarises the finished deep scan and marks provider scan rows", async () => {
+    setup({ health: deepFinishedHealth });
+    await using screen = await renderUi(<CodeitlabRoutingPage />);
+
+    const summary = screen.container.querySelector<HTMLElement>(
+      '[data-codeitlab-speed-probe="deep-done"]',
+    );
+    expect(summary).not.toBeNull();
+    expect(summary?.textContent).toContain("Scanned 2210 models in 1 provider");
+    expect(summary?.textContent).toContain("1900 available");
+    expect(summary?.textContent).toContain("310 failed");
+    expect(summary?.textContent).toContain("fastest: CodeitLab Hermes · 640 ms");
+    expect(summary?.getAttribute("data-speed-probe-total")).toBe("2210");
+    expect(summary?.getAttribute("data-speed-probe-ok")).toBe("1900");
+
+    const hermes = screen.container.querySelector<HTMLElement>('[data-health-provider="hermes"]');
+    expect(hermes?.getAttribute("data-provider-scan-mode")).toBe("deep");
+    expect(hermes?.querySelector('[data-provider-scan-summary="true"]')?.textContent).toContain(
+      "deep scan · 1900/2210 available",
+    );
+    expect(query('[data-codeitlab-speed-probe="done"]')).toBeNull();
+  });
+
+  it("toggles the deep scan and disables its tuning selects when off", async () => {
+    setup({ health: deepFinishedHealth });
+    await using screen = await renderUi(<CodeitlabRoutingPage />);
+
+    const toggle = screen.container.querySelector<HTMLElement>(
+      '[data-codeitlab-setting="deepScan"]',
+    );
+    const concurrency = screen.container.querySelector<HTMLElement>(
+      '[data-codeitlab-setting="deepScanConcurrency"]',
+    );
+    const timeout = screen.container.querySelector<HTMLElement>(
+      '[data-codeitlab-setting="deepScanTimeoutSeconds"]',
+    );
+    expect(toggle?.getAttribute("aria-checked")).toBe("true");
+    expect(concurrency?.hasAttribute("disabled")).toBe(false);
+    expect(timeout?.hasAttribute("disabled")).toBe(false);
+
+    await act(() => toggle?.click());
+
+    expect(mock.updates).toHaveLength(1);
+    expect(mock.updates[0]?.routing.deepScan).toBe(false);
+    expect(toggle?.getAttribute("aria-checked")).toBe("false");
+    expect(concurrency?.hasAttribute("disabled")).toBe(true);
+    expect(timeout?.hasAttribute("disabled")).toBe(true);
   });
 
   it("renders the backup-provider settings and disables them while fallback is off", async () => {

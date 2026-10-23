@@ -80,6 +80,8 @@ export const RoutingCatalog = Schema.Struct({
       models: Schema.Array(Schema.String),
       /** The instance's default model, used to tell a pinned choice from a default. */
       defaultModel: Schema.optional(Schema.String),
+      /** Every non-legacy model the provider advertises (not just the ones shown). */
+      modelCount: Schema.optional(Schema.Number),
       available: Schema.Boolean,
       quota: Schema.Number,
       speed: Schema.Number,
@@ -149,6 +151,16 @@ export const RoutingHealthEntry = Schema.Struct({
       finishedAt: Schema.optional(Schema.String),
       checked: Schema.Number,
       total: Schema.Number,
+      /** `light` = scheduled candidate probe, `deep` = every advertised model. */
+      mode: Schema.optional(Schema.Literals(["light", "deep"])),
+      /** Models that answered the probe. */
+      okCount: Schema.optional(Schema.Number),
+      /** Models that failed the probe. */
+      failedCount: Schema.optional(Schema.Number),
+      /** Models the provider advertises (deep-scan denominator). */
+      modelCount: Schema.optional(Schema.Number),
+      /** Hash of the provider's model list when the deep scan ran. */
+      fingerprint: Schema.optional(Schema.String),
       /** Models that failed the probe and are being retried automatically. */
       retrying: Schema.optional(Schema.Array(Schema.String)),
     }),
@@ -170,6 +182,11 @@ export const RoutingHealth = Schema.Struct({
       finishedAt: Schema.optional(Schema.String),
       checked: Schema.Number,
       total: Schema.Number,
+      mode: Schema.optional(Schema.Literals(["light", "deep"])),
+      okCount: Schema.optional(Schema.Number),
+      failedCount: Schema.optional(Schema.Number),
+      /** Per-provider deep-scan fingerprints, so staleness is per provider. */
+      fingerprints: Schema.optional(Schema.Record(Schema.String, Schema.String)),
     }),
   ),
 });

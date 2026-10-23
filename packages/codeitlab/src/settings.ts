@@ -198,6 +198,18 @@ export const CodeitlabRoutingSettings = Schema.Struct({
   /** How many models per provider the speed probe measures (1–10). */
   speedProbeModelsPerProvider: NumberDefault(3),
   /**
+   * Deep scan: on the first run (and whenever the provider's model list
+   * changes) measure every model a gateway advertises — availability and real
+   * "hi" latency — instead of only the few candidates the light probe picks.
+   * A gateway like Hermes can advertise thousands of custom models; the router
+   * must know which of them actually answer before it can rank them per task.
+   */
+  deepScan: BooleanDefault(true),
+  /** Parallel "hi" probes during a deep scan (1–16). */
+  deepScanConcurrency: NumberDefault(8),
+  /** Per-model timeout for a deep-scan probe, in seconds (5–60). */
+  deepScanTimeoutSeconds: NumberDefault(12),
+  /**
    * Automatic provider fallback: when a turn fails with a provider error
    * (auth, quota, HTTP 4xx/5xx, transport), CodeitLab skips that provider for
    * new auto-routed turns for a while and routes them to the backup provider.

@@ -1,7 +1,8 @@
-import { afterEach, describe, expect, it } from "@effect/vitest";
+import { afterEach, beforeEach, describe, expect, it } from "@effect/vitest";
 import type { RoutingCatalog } from "@codeitlab/core/routing";
 import { RoutingService } from "@codeitlab/core/services";
 import type { ServerSettings } from "@t3tools/contracts";
+import * as DateTime from "effect/DateTime";
 import * as Effect from "effect/Effect";
 
 import { registerActiveRoutingService, resetActiveRoutingService } from "./activeRoutingService.ts";
@@ -145,6 +146,13 @@ describe("provider failure cooldowns", () => {
 });
 
 describe("automatic provider fallback", () => {
+  // Captured outside the Effect programs: the failure cooldown compares against
+  // wall-clock time, and TestClock's epoch would look like a 1970 failure.
+  let nowMs = 0;
+  beforeEach(() => {
+    nowMs = DateTime.nowUnsafe().epochMilliseconds;
+  });
+
   afterEach(() => {
     resetActiveRoutingService();
     resetProviderFailures();
@@ -158,7 +166,7 @@ describe("automatic provider fallback", () => {
         failureClass: "provider_error",
         reason: "HTTP 404",
         cooldownMinutes: 10,
-        nowMs: Date.now(),
+        nowMs,
       });
       const result = yield* resolveEnforcedModelSelection({
         prompt: "fix the bug",
@@ -179,7 +187,7 @@ describe("automatic provider fallback", () => {
         failureClass: "provider_error",
         reason: "HTTP 404",
         cooldownMinutes: 10,
-        nowMs: Date.now(),
+        nowMs,
       });
       const result = yield* resolveEnforcedModelSelection({
         prompt: "fix the bug",
@@ -202,7 +210,7 @@ describe("automatic provider fallback", () => {
         failureClass: "provider_error",
         reason: "HTTP 404",
         cooldownMinutes: 10,
-        nowMs: Date.now(),
+        nowMs,
       });
       const result = yield* resolveEnforcedModelSelection({
         prompt: "fix the bug",
@@ -225,7 +233,7 @@ describe("automatic provider fallback", () => {
         failureClass: "provider_error",
         reason: "HTTP 404",
         cooldownMinutes: 10,
-        nowMs: Date.now(),
+        nowMs,
       });
       const result = yield* resolveEnforcedModelSelection({
         prompt: "fix the bug",
@@ -249,6 +257,29 @@ describe("automatic provider fallback", () => {
         readSettings: Effect.succeed(settingsFor({ fallbackInstanceId: "hermes" })),
       });
       expect(result).toEqual({ instanceId: "claude", model: "sonnet-5" });
+    }),
+  );
+
+  it.effect("uses the configured backup even when it is cooling down", () =>
+    Effect.gen(function* () {
+      registerActiveRoutingService(fakeService());
+      for (const instanceId of ["claude", "hermes"]) {
+        recordProviderFailure({
+          providerInstanceId: instanceId,
+          failureClass: "provider_error",
+          reason: "HTTP 404",
+          cooldownMinutes: 10,
+          nowMs,
+        });
+      }
+      const result = yield* resolveEnforcedModelSelection({
+        prompt: "fix the bug",
+        projectId: null,
+        attachments: [],
+        currentModelSelection: { instanceId: "claude" as never, model: "sonnet-5" },
+        readSettings: Effect.succeed(settingsFor({ fallbackInstanceId: "hermes" })),
+      });
+      expect(result).toEqual({ instanceId: "hermes", model: "nvidia:gpt-5" });
     }),
   );
 });

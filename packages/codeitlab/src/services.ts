@@ -251,13 +251,19 @@ export class RoutingService extends Context.Service<
     /** Probe every provider now and refresh the health snapshot. */
     readonly checkHealth: Effect.Effect<RoutingHealth, CodeitlabServiceError>;
     /**
+     * Deep model scan: measure every model the providers advertise (one "hi"
+     * turn each) in the background and return the health snapshot immediately.
+     */
+    readonly scanModels: Effect.Effect<RoutingHealth, CodeitlabServiceError>;
+    /**
      * Annotate a recorded decision after the automatic provider fallback
      * switched the run to the backup provider, so the history (and the UI
      * badge) explain why the turn ran on a different harness than the router
      * picked.
      */
     readonly recordFallback: (input: {
-      readonly decisionId: string;
+      /** Omit to annotate the most recent recorded decision. */
+      readonly decisionId?: string;
       readonly fromInstanceId: string;
       readonly toInstanceId: string;
       readonly toModel: string;

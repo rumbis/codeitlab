@@ -4329,6 +4329,38 @@ it.effect("stops pending recovery at service shutdown", () =>
   }),
 );
 
+it.effect("masks credentials before the prompt reaches the provider adapter", () =>
+  Effect.gen(function* () {
+    const captured = yield* Ref.make("");
+    const key = "sk-proj-AbCdEf0123456789AbCdEf0123456789AbCdEf0123456789";
+    yield* captureRootRunTermination({
+      key: "privacy-firewall",
+      shouldFinalizeRun: () => Effect.succeed(true),
+      messageText: `my key is ${key}`,
+      settings: { codeitlab: { credentials: { enabled: true } } },
+      startTurn: (input) => Ref.set(captured, input.message.text),
+    });
+    const text = yield* Ref.get(captured);
+    assert.notInclude(text, key);
+    assert.include(text, "sk-proj-");
+  }),
+);
+
+it.effect("refuses to start a turn the privacy firewall blocks", () =>
+  Effect.gen(function* () {
+    const started = yield* Ref.make(false);
+    const exit = yield* captureRootRunTermination({
+      key: "privacy-block",
+      shouldFinalizeRun: () => Effect.succeed(true),
+      messageText: "keep /private this between us /private",
+      settings: { codeitlab: { credentials: { enabled: true, privateTag: "block" } } },
+      startTurn: () => Ref.set(started, true),
+    }).pipe(Effect.exit);
+    assert.isTrue(Exit.isFailure(exit));
+    assert.isFalse(yield* Ref.get(started));
+  }),
+);
+
 function captureRootRunTermination(input: {
   readonly key: string;
   readonly shouldFinalizeRun: () => Effect.Effect<boolean, ProjectionStore.ProjectionStoreV2Error>;
@@ -4354,6 +4386,8 @@ function captureRootRunTermination(input: {
     request: Parameters<EventSink.EventSinkV2["Service"]["writeIfRunCurrent"]>[0],
   ) => Effect.Effect<boolean, EventSink.EventSinkV2Error>;
   readonly afterStart?: (closed: Deferred.Deferred<void>) => Effect.Effect<void>;
+  readonly messageText?: string;
+  readonly settings?: Parameters<typeof ServerSettings.layerTest>[0];
 }) {
   return Effect.gen(function* () {
     const ids = backgroundScenarioIds(input.key);
@@ -4430,7 +4464,7 @@ function captureRootRunTermination(input: {
           Layer.mock(ProviderEventIngestor.ProviderEventIngestorV2)({
             ingestNormalized: input.ingestNormalized ?? (() => Effect.succeed([])),
           }),
-          ServerSettings.layerTest(),
+          ServerSettings.layerTest(input.settings),
           Layer.succeed(RunFinalizationService.RunFinalizationObserver, {
             refresh: () => Effect.void,
             refreshAfterTurn: () =>
@@ -4517,7 +4551,7 @@ function captureRootRunTermination(input: {
             }),
         message: {
           messageId: MessageId.make(`message:${input.key}`),
-          text: "interrupt projection",
+          text: input.messageText ?? "interrupt projection",
           attachments: [],
           createdBy: "user",
           creationSource: "web",

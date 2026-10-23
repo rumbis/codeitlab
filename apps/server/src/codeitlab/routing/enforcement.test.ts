@@ -201,6 +201,7 @@ const fakeRoutingService = (
     history: () => Effect.succeed([]),
     health: Effect.die("unused"),
     checkHealth: Effect.die("unused"),
+    scanModels: Effect.die("unused"),
     recordFallback: () => Effect.void,
   }) as RoutingService["Service"];
 

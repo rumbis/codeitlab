@@ -98,6 +98,13 @@ const routingLayer = Layer.succeed(RoutingService, {
     source: "manual",
     entries: [],
   }),
+  scanModels: Effect.succeed({
+    checkedAt: "2026-01-01T00:00:00.000Z",
+    intervalMinutes: 30,
+    nextCheckAt: "2026-01-01T00:30:00.000Z",
+    source: "manual",
+    entries: [],
+  }),
   recordFallback: () => Effect.void,
 } satisfies RoutingService["Service"]);
 

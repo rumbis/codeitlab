@@ -160,6 +160,7 @@ export const resolveEnforcedModelSelection = Effect.fn("codeitlab.routing.enforc
     };
     const resolveBackup = Effect.fn("codeitlab.routing.resolveBackup")(function* (
       failedInstanceId: string,
+      allowCooling = false,
     ) {
       const catalog = yield* active.value.catalog.pipe(
         Effect.catchCause(() => Effect.succeed(undefined)),
@@ -169,6 +170,7 @@ export const resolveEnforcedModelSelection = Effect.fn("codeitlab.routing.enforc
         catalog,
         settings,
         failedInstanceId,
+        allowCooling,
       });
     });
     const applyFallback = Effect.fn("codeitlab.routing.applyFallback")(function* (
@@ -176,32 +178,38 @@ export const resolveEnforcedModelSelection = Effect.fn("codeitlab.routing.enforc
       decisionId?: string,
     ) {
       if (!fallbackEnabled || !providerUnusable(primary.instanceId)) return primary;
-      const backup = yield* resolveBackup(primary.instanceId);
+      const strict = yield* resolveBackup(primary.instanceId);
+      // Every usable provider is cooling down: honour the configured backup
+      // (or the first provider) as a last resort instead of giving up.
+      const backup = strict ?? (yield* resolveBackup(primary.instanceId, true));
       if (backup === undefined) return primary;
-      if (decisionId !== undefined) {
-        yield* active.value
-          .recordFallback({
-            decisionId,
-            fromInstanceId: primary.instanceId,
-            toInstanceId: backup.instanceId,
-            toModel: backup.model,
-          })
-          .pipe(
-            Effect.catchCause((cause) =>
-              Effect.logWarning("CodeitLab could not annotate the fallback decision.", {
-                cause,
-              }),
-            ),
-          );
-      }
+      // A cooling-down last resort may be the same provider the catalog already
+      // picked; still log and annotate it so the switch is explainable.
+      if (backup.instanceId === primary.instanceId && strict !== undefined) return primary;
+      yield* active.value
+        .recordFallback({
+          ...(decisionId === undefined ? {} : { decisionId }),
+          fromInstanceId: primary.instanceId,
+          toInstanceId: backup.instanceId,
+          toModel: backup.model,
+        })
+        .pipe(
+          Effect.catchCause((cause) =>
+            Effect.logWarning("CodeitLab could not annotate the fallback decision.", {
+              cause,
+            }),
+          ),
+        );
       yield* Effect.logWarning(
-        `CodeitLab fallback route resolved: ${primary.instanceId} failed, using ${backup.instanceId}/${backup.model}.`,
+        strict === undefined
+          ? `CodeitLab fallback route resolved: no usable provider, using ${backup.instanceId}/${backup.model}.`
+          : `CodeitLab fallback route resolved: ${primary.instanceId} failed, using ${backup.instanceId}/${backup.model}.`,
         {
           fromInstanceId: primary.instanceId,
           fromModel: primary.model,
           toInstanceId: backup.instanceId,
           toModel: backup.model,
-          reason: "provider_failure",
+          reason: strict === undefined ? "all_providers_cooling" : "provider_failure",
         },
       );
       return backup;
@@ -258,29 +266,6 @@ export const resolveEnforcedModelSelection = Effect.fn("codeitlab.routing.enforc
     const fallback = catalog === undefined ? undefined : fallbackSelection(catalog);
     const reason =
       decision === undefined ? "no_decision" : (decision.skipReason ?? "unusable_decision");
-    if (fallback === undefined && catalog !== undefined && settings !== undefined) {
-      // Every provider is cooling down after failures: still honour the
-      // configured backup (or the first provider) instead of giving up, so the
-      // user gets the harness they asked for as the backup.
-      const lastResort = backupSelection({
-        catalog,
-        settings,
-        failedInstanceId: "",
-        allowCooling: true,
-      });
-      if (lastResort !== undefined) {
-        yield* Effect.logWarning(
-          `CodeitLab fallback route resolved: no usable provider, using ${lastResort.instanceId}/${lastResort.model}.`,
-          {
-            fromInstanceId: decision?.providerInstanceId ?? "",
-            toInstanceId: lastResort.instanceId,
-            toModel: lastResort.model,
-            reason: "all_providers_cooling",
-          },
-        );
-        return lastResort;
-      }
-    }
     if (fallback === undefined) {
       yield* Effect.logError("CodeitLab auto router could not resolve a concrete provider/model.", {
         reason,

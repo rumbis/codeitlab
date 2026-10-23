@@ -162,7 +162,7 @@ export function CodeitlabCredentialsPage() {
       <CodeitlabSectionHeading
         eyebrow="PRIVACY // LOCAL FIREWALL"
         title="Credentials proxy"
-        description="Keep secrets on this machine. Before anything is sent to a provider, CodeItLab replaces API keys, passwords, tokens, private keys, personal data and /private blocks with deterministic fakes, then restores the real values in the answer. The check runs locally: patterns plus the smallest model that can do the job."
+        description="Keep secrets on this machine. Before anything is sent to a provider, CodeItLab replaces API keys, passwords, tokens, private keys, personal data and /private blocks with deterministic fakes — app turns included. The gateway also restores the real values in answers and tool output. The check runs locally: patterns plus the smallest model that can do the job."
         action={
           <Button size="sm" variant="outline" onClick={() => credentials.refresh()}>
             <RefreshCwIcon className="size-3.5" />
@@ -211,7 +211,7 @@ export function CodeitlabCredentialsPage() {
                   />
                 </label>
                 <label className="flex items-center justify-between gap-3 text-xs text-muted-foreground">
-                  Restore real values in answers and tool output
+                  Restore real values in gateway answers and tool output
                   <Switch
                     checked={draft.restoreResponses}
                     onCheckedChange={(checked) => patch({ restoreResponses: checked })}

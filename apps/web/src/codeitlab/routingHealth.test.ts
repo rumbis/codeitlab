@@ -14,6 +14,11 @@ import {
   healthStatusLabel,
   healthStatusVariant,
   SPEED_PROBE_MODEL_OPTIONS,
+  deepScanProgress,
+  deepScanSummary,
+  DEEP_SCAN_CONCURRENCY_OPTIONS,
+  DEEP_SCAN_TIMEOUT_OPTIONS,
+  providerScanSummary,
   speedProbeChecking,
   speedProbeSummary,
 } from "./routingHealth.ts";
@@ -278,5 +283,107 @@ describe("routing health display", () => {
     });
     assert.deepEqual(speedProbeChecking(entryOnly), { checked: 3, total: 5, providers: 2 });
     assert.deepEqual([...SPEED_PROBE_MODEL_OPTIONS], [1, 2, 3, 5, 8, 10]);
+  });
+});
+
+describe("deep model scan display", () => {
+  const deepEntry = (input: {
+    readonly status: "checking" | "done";
+    readonly checked: number;
+    readonly total: number;
+    readonly okCount?: number;
+    readonly failedCount?: number;
+  }) =>
+    healthEntry({
+      providerInstanceId: "hermes",
+      name: "Hermes",
+      providerKind: "acpRegistry",
+      models: input.total,
+      speeds:
+        input.status === "done"
+          ? [
+              { model: "deepseek-v4", latencyMs: 640, ok: true, checkedAt: CHECKED_AT },
+              { model: "broken", latencyMs: 9_000, ok: false, checkedAt: CHECKED_AT },
+            ]
+          : [],
+      speedProbe: {
+        status: input.status,
+        mode: "deep",
+        startedAt: CHECKED_AT,
+        ...(input.status === "done" ? { finishedAt: CHECKED_AT } : {}),
+        checked: input.checked,
+        total: input.total,
+        modelCount: input.total,
+        ...(input.okCount === undefined ? {} : { okCount: input.okCount }),
+        ...(input.failedCount === undefined ? {} : { failedCount: input.failedCount }),
+      },
+    });
+
+  it("reports progress from the aggregate deep-scan snapshot", () => {
+    const snapshot = health({
+      speedProbe: {
+        status: "checking",
+        mode: "deep",
+        startedAt: CHECKED_AT,
+        checked: 420,
+        total: 2_210,
+        okCount: 300,
+        failedCount: 120,
+      },
+      entries: [deepEntry({ status: "checking", checked: 420, total: 2_210 })],
+    });
+    assert.deepEqual(deepScanProgress(snapshot), {
+      checked: 420,
+      total: 2_210,
+      ok: 300,
+      failed: 120,
+      providers: 1,
+      percent: 19,
+    });
+    assert.strictEqual(deepScanProgress(health({ entries: [] })), null);
+  });
+
+  it("summarises a finished deep scan with available/failed/fastest", () => {
+    const snapshot = health({
+      speedProbe: {
+        status: "done",
+        mode: "deep",
+        startedAt: CHECKED_AT,
+        finishedAt: CHECKED_AT,
+        checked: 2_210,
+        total: 2_210,
+        okCount: 1_900,
+        failedCount: 310,
+      },
+      entries: [deepEntry({ status: "done", checked: 2_210, total: 2_210, okCount: 1_900 })],
+    });
+    const summary = deepScanSummary(snapshot);
+    assert.match(summary ?? "", /Scanned 2210 models in 1 provider/);
+    assert.match(summary ?? "", /1900 available/);
+    assert.match(summary ?? "", /310 failed/);
+    assert.match(summary ?? "", /fastest: CodeitLab Hermes · 640 ms/);
+    assert.strictEqual(deepScanSummary(health({ entries: [] })), null);
+  });
+
+  it("describes one provider's deep scan row", () => {
+    assert.strictEqual(
+      providerScanSummary(deepEntry({ status: "checking", checked: 420, total: 2_210 })),
+      "deep scan 420/2210",
+    );
+    assert.strictEqual(
+      providerScanSummary(
+        deepEntry({ status: "done", checked: 2_210, total: 2_210, okCount: 1_900 }),
+      ),
+      "deep scan · 1900/2210 available",
+    );
+    assert.strictEqual(
+      providerScanSummary(healthEntry({ providerInstanceId: "codex", name: "Codex" })),
+      null,
+    );
+  });
+
+  it("exposes the deep-scan tuning options", () => {
+    assert.deepEqual([...DEEP_SCAN_CONCURRENCY_OPTIONS], [1, 2, 4, 8, 12, 16]);
+    assert.deepEqual([...DEEP_SCAN_TIMEOUT_OPTIONS], [5, 8, 12, 20, 30, 60]);
   });
 });

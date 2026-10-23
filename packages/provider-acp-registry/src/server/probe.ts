@@ -37,7 +37,10 @@ import * as AcpRegistryRuntimeCoordinator from "./AcpRegistryRuntimeCoordinator.
 import * as AcpSessionRuntime from "@t3tools/provider-acp/server/AcpSessionRuntime";
 
 const MAX_AUTH_METHODS = 32;
-const MAX_MODELS = 256;
+// Gateways such as Hermes advertise thousands of custom models; a 256 cap
+// silently hid most of them from routing. Keep a bound, but make it large
+// enough that a real gateway catalog is fully discovered.
+const MAX_MODELS = 4_096;
 const MAX_ID_LENGTH = 128;
 const MAX_NAME_LENGTH = 160;
 const MAX_DESCRIPTION_LENGTH = 1_024;

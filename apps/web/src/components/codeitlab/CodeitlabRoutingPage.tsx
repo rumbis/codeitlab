@@ -36,6 +36,11 @@ import {
   healthStatusLabel,
   healthStatusVariant,
   SPEED_PROBE_MODEL_OPTIONS,
+  DEEP_SCAN_CONCURRENCY_OPTIONS,
+  DEEP_SCAN_TIMEOUT_OPTIONS,
+  deepScanProgress,
+  deepScanSummary,
+  providerScanSummary,
   speedProbeChecking,
   speedProbeSummary,
 } from "../../codeitlab/routingHealth";
@@ -73,8 +78,11 @@ export function CodeitlabRoutingPage() {
   // there is no repainting countdown. The Check now button refreshes the data.
   const [nowMs] = useState(() => Date.now());
   const settings = draft ?? codeitlab.routing;
-  const probeChecking = speedProbeChecking(routing.health);
-  const probeSummary = probeChecking === null ? speedProbeSummary(routing.health) : null;
+  const deepProgress = deepScanProgress(routing.health);
+  const deepSummary = deepProgress === null ? deepScanSummary(routing.health) : null;
+  const probeChecking = deepProgress === null ? speedProbeChecking(routing.health) : null;
+  const probeSummary =
+    probeChecking === null && deepSummary === null ? speedProbeSummary(routing.health) : null;
   const probePercent =
     probeChecking !== null && probeChecking.total > 0
       ? Math.min(100, Math.round((probeChecking.checked / probeChecking.total) * 100))
@@ -217,23 +225,43 @@ export function CodeitlabRoutingPage() {
             </Button>
           </div>
         </div>
-        {probeChecking === null ? (
-          probeSummary === null ? null : (
-            <div
-              className="flex flex-wrap items-center gap-2 border-b border-border/50 px-4 py-2.5 text-2xs text-muted-foreground"
-              data-codeitlab-speed-probe="done"
-              data-speed-probe-models={String(
-                routing.health.entries.reduce((sum, entry) => sum + (entry.speeds?.length ?? 0), 0),
-              )}
-              data-speed-probe-providers={String(
-                routing.health.entries.filter((entry) => (entry.speeds?.length ?? 0) > 0).length,
-              )}
-            >
-              <GaugeIcon className="size-3.5 shrink-0 text-codeitlab-green" aria-hidden="true" />
-              <span>{probeSummary}</span>
+        {deepProgress !== null ? (
+          <div
+            className="flex flex-col gap-2 border-b border-border/50 bg-codeitlab-cyan/5 px-4 py-3"
+            data-codeitlab-speed-probe="deep"
+            data-speed-probe-checked={String(deepProgress.checked)}
+            data-speed-probe-total={String(deepProgress.total)}
+            data-speed-probe-ok={String(deepProgress.ok)}
+            data-speed-probe-failed={String(deepProgress.failed)}
+            data-speed-probe-providers={String(deepProgress.providers)}
+            role="status"
+            aria-live="polite"
+          >
+            <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+              <SparklesIcon className="size-3.5 shrink-0 text-codeitlab-cyan" aria-hidden="true" />
+              <span className="text-sm font-medium text-foreground">
+                Scanning every advertised model…
+              </span>
+              <span className="font-mono text-2xs tabular-nums text-muted-foreground">
+                {deepProgress.checked} / {deepProgress.total} models
+              </span>
+              <span className="text-2xs text-muted-foreground">
+                {deepProgress.ok} available
+                {deepProgress.failed === 0 ? "" : ` · ${deepProgress.failed} failed`}
+              </span>
             </div>
-          )
-        ) : (
+            <div className="h-1 w-full overflow-hidden rounded-full bg-muted" aria-hidden="true">
+              <div
+                className="h-full rounded-full bg-codeitlab-cyan"
+                style={{ width: `${deepProgress.percent}%` }}
+              />
+            </div>
+            <p className="text-2xs text-muted-foreground">
+              The deep scan measures every model each provider advertises, once, so the router only
+              picks models that actually answered. Failed models never win a turn.
+            </p>
+          </div>
+        ) : probeChecking !== null ? (
           <div
             className="flex flex-col gap-2 border-b border-border/50 bg-codeitlab-cyan/5 px-4 py-3"
             data-codeitlab-speed-probe="checking"
@@ -266,6 +294,34 @@ export function CodeitlabRoutingPage() {
               <code className="rounded-sm bg-muted px-1 py-0.5 font-mono">hi</code> to each model to
               measure real speed. Failed models are retried automatically.
             </p>
+          </div>
+        ) : deepSummary !== null ? (
+          <div
+            className="flex flex-wrap items-center gap-2 border-b border-border/50 px-4 py-2.5 text-2xs text-muted-foreground"
+            data-codeitlab-speed-probe="deep-done"
+            data-speed-probe-total={String(routing.health.speedProbe?.total ?? 0)}
+            data-speed-probe-ok={String(routing.health.speedProbe?.okCount ?? 0)}
+            data-speed-probe-failed={String(routing.health.speedProbe?.failedCount ?? 0)}
+            data-speed-probe-providers={String(
+              routing.health.entries.filter((entry) => entry.speedProbe?.mode === "deep").length,
+            )}
+          >
+            <GaugeIcon className="size-3.5 shrink-0 text-codeitlab-green" aria-hidden="true" />
+            <span>{deepSummary}</span>
+          </div>
+        ) : probeSummary === null ? null : (
+          <div
+            className="flex flex-wrap items-center gap-2 border-b border-border/50 px-4 py-2.5 text-2xs text-muted-foreground"
+            data-codeitlab-speed-probe="done"
+            data-speed-probe-models={String(
+              routing.health.entries.reduce((sum, entry) => sum + (entry.speeds?.length ?? 0), 0),
+            )}
+            data-speed-probe-providers={String(
+              routing.health.entries.filter((entry) => (entry.speeds?.length ?? 0) > 0).length,
+            )}
+          >
+            <GaugeIcon className="size-3.5 shrink-0 text-codeitlab-green" aria-hidden="true" />
+            <span>{probeSummary}</span>
           </div>
         )}
         <CodeitlabSettingRow
@@ -343,6 +399,72 @@ export function CodeitlabRoutingPage() {
                 {SPEED_PROBE_MODEL_OPTIONS.map((count) => (
                   <SelectItem key={count} hideIndicator value={String(count)}>
                     {count === 1 ? "1 model" : `${count} models`}
+                  </SelectItem>
+                ))}
+              </SelectPopup>
+            </Select>
+          }
+        />
+        <CodeitlabSettingRow
+          title="Scan every model on first run"
+          description="Measures every model each provider advertises (a one-word “hi” turn per model) and remembers which ones answer and how fast. Untested or failed models are never routed."
+          control={
+            <Switch
+              aria-label="Scan every model on first run"
+              checked={settings.deepScan}
+              data-codeitlab-setting="deepScan"
+              onCheckedChange={(checked) => updateRouting({ deepScan: checked })}
+            />
+          }
+        />
+        <CodeitlabSettingRow
+          title="Deep scan concurrency"
+          description="How many models the scan measures at the same time. Higher finishes faster but hits the provider harder."
+          control={
+            <Select
+              disabled={!settings.deepScan}
+              value={String(settings.deepScanConcurrency)}
+              onValueChange={(value) => updateRouting({ deepScanConcurrency: Number(value) })}
+            >
+              <SelectTrigger
+                size="sm"
+                className="w-full sm:w-40"
+                aria-label="Deep scan concurrency"
+                data-codeitlab-setting="deepScanConcurrency"
+              >
+                <SelectValue>{`${settings.deepScanConcurrency} at a time`}</SelectValue>
+              </SelectTrigger>
+              <SelectPopup align="end" alignItemWithTrigger={false}>
+                {DEEP_SCAN_CONCURRENCY_OPTIONS.map((count) => (
+                  <SelectItem key={count} hideIndicator value={String(count)}>
+                    {`${count} at a time`}
+                  </SelectItem>
+                ))}
+              </SelectPopup>
+            </Select>
+          }
+        />
+        <CodeitlabSettingRow
+          title="Deep scan timeout"
+          description="How long one model gets to answer before the scan marks it failed and stops routing to it."
+          control={
+            <Select
+              disabled={!settings.deepScan}
+              value={String(settings.deepScanTimeoutSeconds)}
+              onValueChange={(value) => updateRouting({ deepScanTimeoutSeconds: Number(value) })}
+            >
+              <SelectTrigger
+                size="sm"
+                className="w-full sm:w-40"
+                aria-label="Deep scan timeout"
+                data-codeitlab-setting="deepScanTimeoutSeconds"
+              >
+                <SelectValue>{`${settings.deepScanTimeoutSeconds} s`}</SelectValue>
+              </SelectTrigger>
+              <SelectPopup align="end" alignItemWithTrigger={false}>
+                {DEEP_SCAN_TIMEOUT_OPTIONS.map((seconds) => (
+                  <SelectItem key={seconds} hideIndicator value={String(seconds)}>
+                    {`${seconds} s`}
                   </SelectItem>
                 ))}
               </SelectPopup>
@@ -477,12 +599,14 @@ export function CodeitlabRoutingPage() {
             {routing.health.entries.map((entry) => {
               const latency = formatHealthLatency(entry.latencyMs);
               const fastest = fastestSpeed(entry.speeds);
+              const scanSummary = providerScanSummary(entry);
               return (
                 <li
                   key={entry.providerInstanceId}
                   className="flex flex-col gap-2 px-4 py-3"
                   data-health-provider={entry.providerInstanceId}
                   data-health-status={entry.status}
+                  data-provider-scan-mode={entry.speedProbe?.mode ?? "light"}
                 >
                   <div className="flex flex-wrap items-center gap-2">
                     <span className="text-sm font-medium text-foreground">
@@ -497,6 +621,14 @@ export function CodeitlabRoutingPage() {
                     <span className="font-mono text-2xs text-muted-foreground">
                       {formatModelCount(entry.models)}
                     </span>
+                    {scanSummary === null ? null : (
+                      <span
+                        className="font-mono text-2xs text-codeitlab-cyan/80"
+                        data-provider-scan-summary="true"
+                      >
+                        {scanSummary}
+                      </span>
+                    )}
                     {latency === null ? null : (
                       <span className="font-mono text-2xs text-muted-foreground">{latency}</span>
                     )}

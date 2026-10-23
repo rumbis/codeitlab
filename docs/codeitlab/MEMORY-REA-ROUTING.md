@@ -259,7 +259,12 @@ skip that provider:
 - The recorded decision is annotated through `RoutingService.recordFallback`
   with ` Fell back to <instance>/<model> because <instance> failed.` so the
   history explains the switch and the routing page shows its `fallback` badge
-  (`data-route-fallback`).
+  (`data-route-fallback`). When the router could not record any decision for
+  the turn (every provider cooling, `decide` threw), the same call appends a
+  synthetic decision instead: `id: route_fallback_<uuid>`,
+  `taskClass: "coding"`, `providerKind: ""`, `enforced: true`, reason
+  `Fell back to <instance>/<model> because <instance> failed.` — the badge and
+  the audit trail work in both cases.
 - The UI shows the four settings on the Routing page and marks such decisions
   with a `fallback` badge (`data-route-fallback`).
 - Failures are recorded from the orchestration run-failure path with the
@@ -304,6 +309,59 @@ total}` plus per-provider `speeds` (fastest first) and `speedProbe`. Each
   turn, 20 s cap, model from the selection, elicitations declined, session and
   process disposed in every path). Providers that cannot run a text-generation
   turn keep the name-tier heuristic and report the probe error.
+
+### Deep model scan: measure every advertised model once
+
+The light probe measures a three-model shortlist. That is enough for CLI
+harnesses that advertise a dozen models, but not for a gateway like Hermes with
+~2,200 custom models: the router used to score the long tail with name-based
+heuristics only, so it could pick a model that does not exist upstream or never
+answers. The deep scan closes that gap.
+
+- **Every model, once.** `deepScanModelSlugs` takes every non-legacy,
+  de-duplicated model a provider advertises (hard cap `DEEP_SCAN_MAX_MODELS =
+4,096`) and `probeInstanceModelSpeed` sends one `"hi"` turn per model with
+  `retry: false` and a per-model timeout. It runs in the background, so a
+  catalog of thousands of models does not block the first turn.
+- **Settings** (`packages/codeitlab/src/settings.ts`, `codeitlab.routing`):
+  `deepScan` (default `true`), `deepScanConcurrency` (default 8, clamp 1–16),
+  `deepScanTimeoutSeconds` (default 12, clamp 5–60). The routing page exposes
+  `[data-codeitlab-setting="deepScan"|"deepScanConcurrency"|"deepScanTimeoutSeconds"]`.
+- **When it runs**: on the first health check after boot, when the provider's
+  model fingerprint changes (`deepScanFingerprint` = count + FNV-1a over the
+  sorted slugs), or when the last deep scan is older than
+  `DEEP_SCAN_REFRESH_MS` (6 h). `checkHealth` (manual "Check now" and the
+  first-run wizard, via the `codeitlab.routing.checkHealth` RPC) runs the light
+  probe and then calls `scanModels`, which forces a deep scan and returns the
+  `checking` snapshot immediately. The scheduled light probe is skipped while a
+  deep scan runs.
+- **Progress**: `health.json` keeps an aggregate `speedProbe` with
+  `mode: "deep"`, `checked`, `total`, `okCount`, `failedCount` and per-provider
+  `speedProbe {mode: "deep", modelCount, fingerprint, okCount, failedCount}`.
+  Progress is persisted every 25 completions; a finished scan is `done` (or
+  `partial` when the cap/timeout cut it short).
+- **Routing uses only measured models.** Once any model for a provider has been
+  measured, `buildSeeds` ranks the successful ones with `rankTestedModels`:
+  `fast`/`cheap` → lowest measured latency, `vision` → vision-capable names
+  first then smartness, `coding`/`reasoning` → smartness then speed then
+  latency, `chat` → 0.6·smartness + 0.4·speed. Failed and untested models are
+  never candidates after the scan, and a provider whose scan finished with zero
+  answering models is marked unavailable even when its login/quota look fine.
+  While the scan is still warming up (no measurement yet) the heuristic
+  shortlist keeps the first turn routable.
+- **Log lines**: `CodeItLab deep scan started`, `CodeItLab deep scan provider
+{providerInstanceId, checked, ok, failed}` and `CodeItLab deep scan complete
+{checked, total, ok, failed, providers}`.
+- **UI**: while scanning, the routing page shows
+  `[data-codeitlab-speed-probe="deep"]` with
+  `data-speed-probe-checked|total|ok|failed|providers`; when finished,
+  `[data-codeitlab-speed-probe="deep-done"]` with the same counters, and each
+  health row carries `data-provider-scan-mode="deep"` plus a
+  `data-provider-scan-summary` line (`deep scan · 1,900/2,210 available`).
+- **Cost**: one tiny turn per advertised model. A 2,200-model gateway at
+  concurrency 8 and a 12 s timeout takes roughly 55 minutes worst case and
+  sends 2,200 `"hi"` turns; the scan is incremental, interruptible at layer
+  shutdown, and refreshed only when the model list changes or after 6 h.
 
 ### Auto router selection (opt-in)
 

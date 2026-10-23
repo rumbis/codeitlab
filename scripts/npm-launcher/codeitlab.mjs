@@ -103,7 +103,7 @@ async function install(dir, key) {
   const line = sums
     .split(/\r?\n/)
     .map((l) => expected.exec(l.trim()))
-    .find((m) => m && m[2] === archive);
+    .find((m) => m && m[2].split("/").pop() === archive);
   if (!line) throw new Error(`${archive} is not listed in the release's SHA256SUMS`);
 
   fs.mkdirSync(path.dirname(dir), { recursive: true });
@@ -196,7 +196,8 @@ async function main() {
       );
     }
   }
-  run(path.join(dir, process.platform === "win32" ? "codeitlab.exe" : "codeitlab"));
+  // The archive ships the runtime executable under its technical name (`t3`).
+  run(path.join(dir, process.platform === "win32" ? "t3.exe" : "t3"));
 }
 
 await main().catch(fail);
