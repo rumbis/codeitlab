@@ -1,0 +1,133 @@
+{
+  "name": "@codeitlab/core",
+  "version": "0.1.0",
+  "private": true,
+  "description": "CodeitLab feature contracts and service interfaces (Nexus, memory, routing, policy, REA).",
+  "license": "MIT",
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./src/index.ts",
+      "import": "./src/index.ts"
+    },
+    "./settings": {
+      "types": "./src/settings.ts",
+      "import": "./src/settings.ts"
+    },
+    "./nexus": {
+      "types": "./src/nexus.ts",
+      "import": "./src/nexus.ts"
+    },
+    "./memory": {
+      "types": "./src/memory.ts",
+      "import": "./src/memory.ts"
+    },
+    "./routing": {
+      "types": "./src/routing.ts",
+      "import": "./src/routing.ts"
+    },
+    "./policy": {
+      "types": "./src/policy.ts",
+      "import": "./src/policy.ts"
+    },
+    "./rea": {
+      "types": "./src/rea.ts",
+      "import": "./src/rea.ts"
+    },
+    "./services": {
+      "types": "./src/services.ts",
+      "import": "./src/services.ts"
+    },
+    "./ecosystem": {
+      "types": "./src/ecosystem.ts",
+      "import": "./src/ecosystem.ts"
+    },
+    "./studio": {
+      "types": "./src/studio.ts",
+      "import": "./src/studio.ts"
+    },
+    "./remote": {
+      "types": "./src/remote.ts",
+      "import": "./src/remote.ts"
+    },
+    "./integrations": {
+      "types": "./src/integrations.ts",
+      "import": "./src/integrations.ts"
+    },
+    "./credentials": {
+      "types": "./src/credentials.ts",
+      "import": "./src/credentials.ts"
+    },
+    "./team": {
+      "types": "./src/team.ts",
+      "import": "./src/team.ts"
+    },
+    "./credentials/engine": {
+      "types": "./src/credentials/engine.ts",
+      "import": "./src/credentials/engine.ts"
+    },
+    "./credentials/model": {
+      "types": "./src/credentials/model.ts",
+      "import": "./src/credentials/model.ts"
+    },
+    "./quests": {
+      "types": "./src/quests.ts",
+      "import": "./src/quests.ts"
+    },
+    "./board": {
+      "types": "./src/board.ts",
+      "import": "./src/board.ts"
+    },
+    "./deploy": {
+      "types": "./src/deploy.ts",
+      "import": "./src/deploy.ts"
+    },
+    "./bots": {
+      "types": "./src/bots.ts",
+      "import": "./src/bots.ts"
+    },
+    "./context": {
+      "types": "./src/context.ts",
+      "import": "./src/context.ts"
+    },
+    "./moodboard": {
+      "types": "./src/moodboard.ts",
+      "import": "./src/moodboard.ts"
+    },
+    "./budget": {
+      "types": "./src/budget.ts",
+      "import": "./src/budget.ts"
+    },
+    "./issues": {
+      "types": "./src/issues.ts",
+      "import": "./src/issues.ts"
+    },
+    "./sketch": {
+      "types": "./src/sketch.ts",
+      "import": "./src/sketch.ts"
+    },
+    "./wallpaper": {
+      "types": "./src/wallpaper.ts",
+      "import": "./src/wallpaper.ts"
+    },
+    "./profile": {
+      "types": "./src/profile.ts",
+      "import": "./src/profile.ts"
+    },
+    "./progress": {
+      "types": "./src/progress.ts",
+      "import": "./src/progress.ts"
+    }
+  },
+  "scripts": {
+    "typecheck": "tsc-rs --noEmit",
+    "test": "vp test run --config ../../vite.config.ts --dir ."
+  },
+  "dependencies": {
+    "effect": "catalog:"
+  },
+  "devDependencies": {
+    "@effect/vitest": "catalog:",
+    "vite-plus": "catalog:"
+  }
+}

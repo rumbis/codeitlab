@@ -1,0 +1,35 @@
+# /etc/systemd/system/codeitlab-marketplace.service
+[Unit]
+Description=CodeitLab marketplace
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=codeitlab
+Group=codeitlab
+WorkingDirectory=/opt/codeitlab/apps/marketplace
+EnvironmentFile=/etc/codeitlab/marketplace.env
+ExecStart=/usr/bin/node src/server/main.ts
+Restart=always
+RestartSec=3
+# A slow provider must not make the service look dead.
+TimeoutStopSec=20
+
+# Hardening: the process only needs its database and backup directory.
+NoNewPrivileges=true
+PrivateTmp=true
+PrivateDevices=true
+ProtectSystem=strict
+ProtectHome=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+RestrictSUIDSGID=true
+LockPersonality=true
+MemoryDenyWriteExecute=true
+ReadWritePaths=/var/lib/codeitlab /var/backups/codeitlab
+
+[Install]
+WantedBy=multi-user.target

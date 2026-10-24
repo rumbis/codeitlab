@@ -1,0 +1,22 @@
+{
+  "id": "/",
+  "name": "CodeitLab",
+  "short_name": "CodeitLab",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#05080a",
+  "theme_color": "#05080a",
+  "icons": [
+    {
+      "src": "/favicon-32x32.png",
+      "sizes": "32x32",
+      "type": "image/png"
+    },
+    {
+      "src": "/apple-touch-icon.png",
+      "sizes": "180x180",
+      "type": "image/png"
+    }
+  ]
+}

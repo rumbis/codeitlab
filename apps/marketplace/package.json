@@ -1,0 +1,22 @@
+{
+  "name": "@codeitlab/marketplace",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "node --watch src/server/main.ts",
+    "start": "node src/server/main.ts",
+    "test": "vp test run",
+    "stripe:sandbox": "node scripts/stripe-sandbox.ts",
+    "stripe:sandbox:mock": "node scripts/stripe-sandbox.ts --mock",
+    "doctor": "node scripts/doctor.ts",
+    "typecheck": "tsc-rs --noEmit",
+    "push:keys": "node scripts/push-keys.ts",
+    "backup": "node scripts/backup.ts",
+    "smoke": "node scripts/smoke.ts"
+  },
+  "dependencies": {},
+  "devDependencies": {
+    "typescript": "~6.0.3"
+  }
+}
