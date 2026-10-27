@@ -1,0 +1,27 @@
+# Reverse proxy for the marketplace at https://codeitlab.com/market
+# Caddy terminates TLS and forwards the untouched path, so the app keeps
+# MARKETPLACE_BASE_PATH=/market and every link it renders stays under /market.
+codeitlab.com {
+	encode zstd gzip
+
+	# Web Push needs the service worker at the app's scope, not the site root.
+	handle /market/* {
+		reverse_proxy 127.0.0.1:4174 {
+			# Overwrite, do not append: the app trusts this header
+			# (MARKETPLACE_TRUST_PROXY=1) for rate-limit buckets.
+			header_up X-Forwarded-For {remote_host}
+			header_up X-Forwarded-Proto {scheme}
+			header_up X-Real-IP {remote_host}
+		}
+	}
+
+	handle {
+		respond "CodeItLab" 200
+	}
+
+	header {
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		X-Content-Type-Options "nosniff"
+		Referrer-Policy "same-origin"
+	}
+}

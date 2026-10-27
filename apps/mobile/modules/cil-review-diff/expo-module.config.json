@@ -1,0 +1,10 @@
+{
+  "platforms": ["apple", "android"],
+  "apple": {
+    "modules": ["CilReviewDiffModule"],
+    "podspecPath": "CilReviewDiffNative.podspec"
+  },
+  "android": {
+    "modules": ["expo.modules.cilreviewdiff.CilReviewDiffModule"]
+  }
+}

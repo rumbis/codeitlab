@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<component type="desktop-application">
+  <id>app.codeitlab</id>
+  <metadata_license>CC0-1.0</metadata_license>
+  <project_license>MIT</project_license>
+  <name>CodeItLab</name>
+  <summary>Desktop GUI for coding agents</summary>
+  <developer id="app.codeitlab">
+    <name>CodeItLab Tools Inc.</name>
+  </developer>
+  <description>
+    <p>
+      CodeItLab is an open-source desktop app for coding agents. Work with your
+      existing agent subscriptions, review code changes, and run commands in
+      your projects.
+    </p>
+    <p>
+      Connect from desktop, web, or mobile to continue working remotely.
+    </p>
+  </description>
+  <launchable type="desktop-id">codeitlab.desktop</launchable>
+  <icon type="stock">codeitlab</icon>
+  <provides>
+    <binary>codeitlab</binary>
+  </provides>
+  <categories>
+    <category>Development</category>
+  </categories>
+  <url type="homepage">https://codeitlab.dev</url>
+  <url type="bugtracker">https://github.com/rumbis/codeitlab/issues</url>
+  <url type="vcs-browser">https://github.com/rumbis/codeitlab</url>
+</component>

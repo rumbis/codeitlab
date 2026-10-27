@@ -1,0 +1,4 @@
+interface:
+  display_name: "CodeItLab App Testing"
+  short_description: "Test web and desktop in CodeItLab's Browser panel"
+  default_prompt: "Use $test-cil-app to verify the affected web or desktop flow through CodeItLab's Browser panel."
