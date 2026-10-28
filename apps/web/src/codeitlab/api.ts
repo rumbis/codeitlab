@@ -108,6 +108,13 @@ export const codeitlabMemoryStatsQuery = createEnvironmentRpcQueryAtomFamily(
   },
 );
 
+export const codeitlabMemorySoulQuery = createEnvironmentRpcQueryAtomFamily(connectionAtomRuntime, {
+  label: "codeitlab:memory:soul",
+  tag: WS_METHODS.codeitlabMemorySoul,
+  staleTimeMs: 10_000,
+  idleTtlMs: 120_000,
+});
+
 export const codeitlabRoutingCatalogQuery = createEnvironmentRpcQueryAtomFamily(
   connectionAtomRuntime,
   {
@@ -890,6 +897,7 @@ export function useCodeItLabNexus(): CodeItLabDataView<NexusCatalog> {
 
 export function useCodeItLabMemory(): CodeItLabDataView<ReadonlyArray<MemoryEntry>> & {
   readonly stats: MemoryStats;
+  readonly soul: { readonly memory: string; readonly user: string };
   readonly add: (input: {
     readonly scope: "global" | "project";
     readonly projectId?: string | null;
@@ -907,6 +915,9 @@ export function useCodeItLabMemory(): CodeItLabDataView<ReadonlyArray<MemoryEntr
   );
   const stats = useEnvironmentQuery(
     environmentId === null ? null : codeitlabMemoryStatsQuery({ environmentId, input: {} }),
+  );
+  const soulQuery = useEnvironmentQuery(
+    environmentId === null ? null : codeitlabMemorySoulQuery({ environmentId, input: {} }),
   );
   const addCommand = useAtomCommand(codeitlabMemoryAddCommand, { reportFailure: false });
   const deleteCommand = useAtomCommand(codeitlabMemoryDeleteCommand, { reportFailure: false });
@@ -942,6 +953,7 @@ export function useCodeItLabMemory(): CodeItLabDataView<ReadonlyArray<MemoryEntr
   return {
     data: list.data ?? PREVIEW_MEMORY_ENTRIES,
     stats: stats.data ?? PREVIEW_MEMORY_STATS,
+    soul: soulQuery.data ?? { memory: "", user: "" },
     source: list.data === null ? "local" : "server",
     error: errorText(list.error),
     isPending: list.isPending,

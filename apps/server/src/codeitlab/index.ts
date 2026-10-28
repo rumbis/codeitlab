@@ -109,6 +109,7 @@ export const unavailableCodeItLabHandlers: CodeItLabRpcHandlers = {
   "codeitlab.memory.update": unavailable("codeitlab.memory.update"),
   "codeitlab.memory.delete": unavailable("codeitlab.memory.delete"),
   "codeitlab.memory.stats": unavailable("codeitlab.memory.stats"),
+  "codeitlab.memory.soul": unavailable("codeitlab.memory.soul"),
   "codeitlab.routing.catalog": unavailable("codeitlab.routing.catalog"),
   "codeitlab.routing.decide": unavailable("codeitlab.routing.decide"),
   "codeitlab.routing.history": unavailable("codeitlab.routing.history"),

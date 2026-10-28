@@ -1,3 +1,4 @@
+import * as MemoryExtractionService from "../codeitlab/memory/MemoryExtractionService.ts";
 import * as ServerSecretStore from "../auth/ServerSecretStore.ts";
 import * as SourceControlProviderRegistry from "../sourceControl/SourceControlProviderRegistry.ts";
 import * as NodeServices from "@effect/platform-node/NodeServices";
@@ -42,6 +43,10 @@ import * as ProviderTurnStartServiceTestkit from "./ProviderTurnStartService.tes
 import * as RuntimeLayer from "./runtimeLayer.ts";
 import * as McpSessionRegistryTestkit from "../mcp/McpSessionRegistry.testkit.ts";
 import { GROK_MODEL_SELECTION } from "./testkit/fixtures/shared.ts";
+
+// These suites exercise provider orchestration, not memory; extraction stays
+// inert so the layer set stays about the turn.
+const layerMemoryExtractionTest = Layer.mock(MemoryExtractionService.MemoryExtractionService)({});
 
 const layerPlatformTest = Layer.merge(
   NodeServices.layer,
@@ -113,6 +118,7 @@ const layerProviderInstanceRegistry = ProviderInstanceRegistryHydration.layer.pi
 );
 
 const layerLive = RuntimeLayer.layer.pipe(
+  Layer.provide(layerMemoryExtractionTest),
   Layer.provide(ProviderTurnStartServiceTestkit.layer),
   Layer.provide(McpSessionRegistryTestkit.layer),
   Layer.provide(SqlitePersistence.layerMemory),

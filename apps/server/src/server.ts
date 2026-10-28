@@ -84,6 +84,10 @@ import * as ServerRuntimeStartup from "./serverRuntimeStartup.ts";
 import * as ServerOwnership from "./serverOwnership.ts";
 import * as AgentAwarenessRelay from "./relay/AgentAwarenessRelay.ts";
 import { hasCloudPublicConfig } from "./cloud/publicConfig.ts";
+import * as MemoryStore from "./codeitlab/memory/MemoryStore.ts";
+import * as MemoryService from "./codeitlab/memory/MemoryService.ts";
+import * as MemoryExtraction from "./codeitlab/memory/MemoryExtractionService.ts";
+import * as Soul from "./codeitlab/memory/Soul.ts";
 import * as ServerSettings from "./serverSettings.ts";
 import * as ProjectEnrichmentService from "./project/ProjectEnrichmentService.ts";
 import * as NativeAppIconResolver from "./assets/NativeAppIconResolver.ts";
@@ -510,9 +514,41 @@ const layerOrchestrationV2Runtime = RuntimeLayer.layerProduction.pipe(
   ),
 );
 
+// Memory is process-global: one corpus per server state dir. Built here because
+// the store needs filesystem, path and crypto, which are ambient only at this
+// boundary. Both post-turn extraction and turn-start recall share this instance,
+// so a memory written on one path is visible to the other.
+const layerMemoryStoreProvided = MemoryStore.layer.pipe(
+  Layer.provide(layerPlatformServices),
+  Layer.provide(ServerSettings.layer),
+);
+// The soul is the human-readable half of memory; it renders the same corpus, so it
+// shares this boundary for the same reason.
+const layerSoulProvided = Soul.layer.pipe(
+  Layer.provide(layerMemoryStoreProvided),
+  Layer.provide(layerPlatformServices),
+);
+const layerMemoryServiceProvided = MemoryService.layer.pipe(
+  Layer.provide(layerMemoryStoreProvided),
+  Layer.provide(ServerSettings.layer),
+  Layer.provide(layerPlatformServices),
+);
+const layerMemoryExtractionProvided = MemoryExtraction.layer.pipe(
+  Layer.provide(layerMemoryStoreProvided),
+  Layer.provide(ServerSettings.layer),
+  Layer.provide(layerPlatformServices),
+);
+const layerMemory = Layer.mergeAll(
+  layerMemoryStoreProvided,
+  layerMemoryServiceProvided,
+  layerMemoryExtractionProvided,
+  layerSoulProvided,
+);
+
 const layerOrchestrationApplication = CheckpointDiffQuery.layer.pipe(
   Layer.provideMerge(layerCheckpointStore),
   Layer.provideMerge(layerOrchestrationV2Runtime),
+  Layer.provideMerge(layerMemory),
 );
 
 const layerThreadSettlementWorker = Layer.effectDiscard(

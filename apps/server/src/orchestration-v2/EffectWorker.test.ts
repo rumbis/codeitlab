@@ -32,6 +32,7 @@ import * as ProviderSessionManager from "./ProviderSessionManager.ts";
 import * as ProviderTurnControlService from "./ProviderTurnControlService.ts";
 import * as ProviderTurnStartService from "./ProviderTurnStartService.ts";
 import * as RuntimeRequestService from "./RuntimeRequestService.ts";
+import * as MemoryTurnExtractionService from "./MemoryTurnExtractionService.ts";
 import * as ThreadTitleRegenerationService from "./ThreadTitleRegenerationService.ts";
 import * as ThreadManagementService from "./ThreadManagementService.ts";
 import * as ServerSettings from "../serverSettings.ts";
@@ -155,6 +156,14 @@ function layerExecutorFor(input: {
         execute: () => Effect.void,
       }),
     ),
+    Layer.succeed(
+      MemoryTurnExtractionService.MemoryTurnExtractionService,
+      MemoryTurnExtractionService.MemoryTurnExtractionService.of({
+        // Recorded rather than mocked away: a completed turn must actually reach
+        // the memory writer, which is the whole point of the effect.
+        extract: () => record("memory.extract"),
+      }),
+    ),
   );
   return EffectWorker.layerExecutor.pipe(
     Layer.provide(
@@ -202,6 +211,21 @@ it("does not retry pure interrupt races where the turn is already gone", () => {
   );
 });
 
+it.effect("writes a memory of a completed turn through the effect worker", () =>
+  Effect.gen(function* () {
+    const now = yield* DateTime.now;
+    const events = yield* Ref.make<ReadonlyArray<string>>([]);
+    const layer = layerExecutorFor({ events });
+    yield* Effect.gen(function* () {
+      const executor = yield* EffectWorker.OrchestrationEffectExecutorV2;
+      yield* executor.execute({
+        ...restartEffect(now, { type: "detach" }),
+        request: { type: "memory.extract-turn", runId },
+      });
+    }).pipe(Effect.provide(layer));
+    assert.deepEqual(yield* Ref.get(events), ["memory.extract"]);
+  }),
+);
 it.effect("settles a stopped run when its adapter has already lost the native turn", () =>
   Effect.gen(function* () {
     const now = yield* DateTime.now;

@@ -33,6 +33,9 @@ import * as ProjectStore from "./ProjectStore.ts";
 import * as ProviderAdapterRegistry from "./ProviderAdapterRegistry.ts";
 import * as ProviderContinuationRequests from "@codeitlab/provider-core/server/ProviderContinuationRequests";
 import * as ProviderContinuationService from "./ProviderContinuationService.ts";
+import * as MemoryExtractionService from "../codeitlab/memory/MemoryExtractionService.ts";
+import { layer as memoryStoreLayer } from "../codeitlab/memory/MemoryStore.ts";
+import * as MemoryTurnExtractionService from "./MemoryTurnExtractionService.ts";
 import * as ThreadTitleRegenerationService from "./ThreadTitleRegenerationService.ts";
 import * as ProviderEventIngestor from "./ProviderEventIngestor.ts";
 import * as ThreadCommandExecutor from "./ThreadCommandExecutor.ts";
@@ -306,6 +309,12 @@ const layerThreadTitleRegenerationProvided = ThreadTitleRegenerationService.laye
     Layer.mergeAll(layerThreadManagementProvided, ProjectStore.layer, TextGeneration.layer),
   ),
 );
+// Projections are already in this graph; only the extraction service (which owns
+// the process-global memory store) is supplied from the server boundary. That
+// keeps the executor's context requirement at one service.
+const layerMemoryTurnExtractionProvided = MemoryTurnExtractionService.layer.pipe(
+  Layer.provide(Layer.mergeAll(ProjectionStore.layer, layerStores)),
+);
 const layerEffectExecutorProvided = EffectWorker.layerExecutor.pipe(
   Layer.provide(
     Layer.mergeAll(
@@ -316,6 +325,10 @@ const layerEffectExecutorProvided = EffectWorker.layerExecutor.pipe(
       layerProviderTurnStartServiceProvided,
       layerRuntimeRequestServiceProvided,
       layerThreadTitleRegenerationProvided,
+      // Memory extraction needs the process-global memory store, which is built
+      // at the server boundary where filesystem/crypto are in scope. Requirement
+      // stays a single service, so the executor layer's contract is unchanged.
+      layerMemoryTurnExtractionProvided,
       layerThreadManagementProvided,
     ),
   ),

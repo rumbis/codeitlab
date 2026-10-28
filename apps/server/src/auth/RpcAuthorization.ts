@@ -95,6 +95,7 @@ export const RPC_REQUIRED_SCOPES = {
   [WS_METHODS.codeitlabMemoryUpdate]: AuthSettingsWriteScope,
   [WS_METHODS.codeitlabMemoryDelete]: AuthSettingsWriteScope,
   [WS_METHODS.codeitlabMemoryStats]: AuthOrchestrationReadScope,
+  [WS_METHODS.codeitlabMemorySoul]: AuthOrchestrationReadScope,
   [WS_METHODS.codeitlabRoutingCatalog]: AuthOrchestrationReadScope,
   [WS_METHODS.codeitlabRoutingDecide]: AuthOrchestrationReadScope,
   [WS_METHODS.codeitlabRoutingHistory]: AuthOrchestrationReadScope,

@@ -667,6 +667,7 @@ export const WS_METHODS = {
   codeitlabMemoryUpdate: "codeitlab.memory.update",
   codeitlabMemoryDelete: "codeitlab.memory.delete",
   codeitlabMemoryStats: "codeitlab.memory.stats",
+  codeitlabMemorySoul: "codeitlab.memory.soul",
   codeitlabRoutingCatalog: "codeitlab.routing.catalog",
   codeitlabRoutingDecide: "codeitlab.routing.decide",
   codeitlabRoutingHistory: "codeitlab.routing.history",
@@ -2120,6 +2121,16 @@ const WsCodeItLabMemoryStatsRpc = Rpc.make(WS_METHODS.codeitlabMemoryStats, {
   error: CodeItLabRpcError,
 });
 
+/**
+ * The soul files are stored as free-form Markdown, so the wire carries plain
+ * strings rather than a schema: the user is meant to be able to type anything.
+ */
+const WsCodeItLabMemorySoulRpc = Rpc.make(WS_METHODS.codeitlabMemorySoul, {
+  payload: Schema.Struct({}),
+  success: Schema.Struct({ memory: Schema.String, user: Schema.String }),
+  error: CodeItLabRpcError,
+});
+
 const WsCodeItLabRoutingCatalogRpc = Rpc.make(WS_METHODS.codeitlabRoutingCatalog, {
   payload: Schema.Struct({}),
   success: RoutingCatalog,
@@ -2520,6 +2531,7 @@ export const WsRpcGroup = RpcGroup.make(
   WsCodeItLabMemoryUpdateRpc,
   WsCodeItLabMemoryDeleteRpc,
   WsCodeItLabMemoryStatsRpc,
+  WsCodeItLabMemorySoulRpc,
   WsCodeItLabRoutingCatalogRpc,
   WsCodeItLabRoutingDecideRpc,
   WsCodeItLabRoutingHistoryRpc,

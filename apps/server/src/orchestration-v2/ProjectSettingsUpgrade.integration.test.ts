@@ -1,3 +1,4 @@
+import * as MemoryExtractionService from "../codeitlab/memory/MemoryExtractionService.ts";
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import * as McpProviderSessions from "@codeitlab/provider-core/server/McpProviderSessions";
 import { assert, it } from "@effect/vitest";
@@ -28,6 +29,9 @@ import * as VcsProcess from "../vcs/VcsProcess.ts";
 import * as WorkspacePaths from "../workspace/WorkspacePaths.ts";
 import * as LegacyV1ThreadImporter from "./legacy/LegacyV1ThreadImporter.ts";
 import * as RuntimeLayer from "./runtimeLayer.ts";
+
+// The upgrade path is about migrations, not learning; extraction is inert.
+const layerMemoryExtractionTest = Layer.mock(MemoryExtractionService.MemoryExtractionService)({});
 
 const projectId = ProjectId.make("project:upgrade");
 const icon = { kind: "emoji", emoji: "🦊" } as const;
@@ -169,6 +173,7 @@ const layerRuntime = (dbPath: string) => {
         pruneWorktrees: () => Effect.void,
       }),
     ),
+    Layer.provide(layerMemoryExtractionTest),
     Layer.provide(layerPlatform),
   );
 };

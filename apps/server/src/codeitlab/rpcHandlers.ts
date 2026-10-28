@@ -84,7 +84,9 @@ import {
 } from "@codeitlab/contracts";
 import type { CodeItLabTask } from "@codeitlab/core/board";
 import * as Effect from "effect/Effect";
+import * as Option from "effect/Option";
 
+import * as SoulModule from "./memory/Soul.ts";
 import { probeModelEndpoint } from "./models/ModelEndpointProbe.ts";
 
 /**
@@ -144,6 +146,10 @@ export interface CodeItLabRpcHandlers {
     readonly id: string;
   }) => Effect.Effect<{}, CodeItLabServiceError>;
   readonly "codeitlab.memory.stats": () => Effect.Effect<MemoryStats, CodeItLabServiceError>;
+  readonly "codeitlab.memory.soul": () => Effect.Effect<
+    { readonly memory: string; readonly user: string },
+    CodeItLabServiceError
+  >;
   readonly "codeitlab.routing.catalog": () => Effect.Effect<RoutingCatalog, CodeItLabServiceError>;
   readonly "codeitlab.routing.decide": (input: {
     readonly prompt: string;
@@ -332,6 +338,9 @@ export const makeCodeItLabRpcHandlers: Effect.Effect<
   | EngagementsService
 > = Effect.gen(function* () {
   const memory = yield* MemoryService;
+  // Optional on purpose: the soul is a convenience view over the same corpus, so a
+  // deployment without it should lose the panel, not every RPC in this file.
+  const soul = yield* Effect.serviceOption(SoulModule.Soul);
   const nexus = yield* NexusService;
   const policy = yield* PolicyService;
   const rea = yield* ReaService;
@@ -386,6 +395,11 @@ export const makeCodeItLabRpcHandlers: Effect.Effect<
       }),
     "codeitlab.memory.delete": (input) => memory.remove(input.id).pipe(Effect.as({})),
     "codeitlab.memory.stats": () => memory.stats,
+    "codeitlab.memory.soul": () =>
+      Option.match(soul, {
+        onNone: () => Effect.succeed({ memory: "", user: "" }),
+        onSome: (service) => service.read,
+      }),
     "codeitlab.routing.catalog": () => routing.catalog,
     "codeitlab.routing.decide": (input) =>
       routing.decide({

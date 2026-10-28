@@ -131,6 +131,35 @@ export function CodeItLabMemoryPage() {
         />
       </div>
 
+      <div className="grid gap-3 lg:grid-cols-2">
+        <CodeItLabCard>
+          <div className="flex flex-col gap-2 px-4 py-3">
+            <p className="codeitlab-mono-label text-codeitlab-green/80">Soul · what I learned</p>
+            <p className="text-xs text-muted-foreground">
+              Written by the agent from finished turns. Stored as SOUL.md; edit it and your words
+              survive the next refresh.
+            </p>
+            <pre className="max-h-72 overflow-auto whitespace-pre-wrap break-words text-xs text-foreground/80">
+              {memory.soul.memory.trim().length === 0
+                ? "Nothing learned yet. Finish a turn and it will appear here."
+                : memory.soul.memory}
+            </pre>
+          </div>
+        </CodeItLabCard>
+        <CodeItLabCard>
+          <div className="flex flex-col gap-2 px-4 py-3">
+            <p className="codeitlab-mono-label text-codeitlab-green/80">Soul · who I work with</p>
+            <p className="text-xs text-muted-foreground">
+              Your preferences, kept apart from project facts. Stored as USER.md.
+            </p>
+            <pre className="max-h-72 overflow-auto whitespace-pre-wrap break-words text-xs text-foreground/80">
+              {memory.soul.user.trim().length === 0
+                ? "No preferences learned yet."
+                : memory.soul.user}
+            </pre>
+          </div>
+        </CodeItLabCard>
+      </div>
       <CodeItLabCard>
         <div className="flex flex-col gap-3 px-4 py-3">
           <p className="codeitlab-mono-label text-codeitlab-green/80">Add memory</p>

@@ -19,6 +19,7 @@ import * as CheckpointCapture from "./CheckpointCaptureService.ts";
 import * as CheckpointRollback from "./CheckpointRollbackService.ts";
 import * as EffectOutbox from "./EffectOutbox.ts";
 import * as EffectWorker from "./EffectWorker.ts";
+import * as MemoryTurnExtraction from "./MemoryTurnExtractionService.ts";
 import * as ProjectionStore from "./ProjectionStore.ts";
 import * as ProviderSessions from "./ProviderSessionManager.ts";
 import * as ProviderTurnControl from "./ProviderTurnControlService.ts";
@@ -95,6 +96,7 @@ it.effect.each([
         Layer.mock(CheckpointRollback.CheckpointRollbackServiceV2)({}),
         Layer.mock(RuntimeRequests.RuntimeRequestServiceV2)({}),
         Layer.mock(ThreadTitles.ThreadTitleRegenerationService)({}),
+        Layer.mock(MemoryTurnExtraction.MemoryTurnExtractionService)({}),
         Layer.mock(ThreadManagement.ThreadManagementService)({}),
         ServerSettings.layerTest(),
         Layer.mock(ProviderTurnStart.ProviderTurnStartServiceV2)({

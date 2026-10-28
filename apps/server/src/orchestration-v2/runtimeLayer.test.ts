@@ -1,3 +1,4 @@
+import * as MemoryExtractionService from "../codeitlab/memory/MemoryExtractionService.ts";
 import { SourceControlProviderKind } from "@codeitlab/contracts";
 import { limitRecoveryCommand } from "./UsageLimitRecoveryWorker.ts";
 import * as McpProviderSessions from "@codeitlab/provider-core/server/McpProviderSessions";
@@ -88,6 +89,10 @@ import * as ResourceCleanupService from "./ResourceCleanupService.ts";
 import * as ThreadLaunchService from "./ThreadLaunchService.ts";
 import * as ThreadCommandExecutor from "./ThreadCommandExecutor.ts";
 import type * as ProviderAdapter from "@codeitlab/provider-core/server/ProviderAdapter";
+
+// Memory extraction is post-turn bookkeeping and needs the process-global store,
+// which only the server boundary builds; these suites are about the runtime graph.
+const layerMemoryExtractionTest = Layer.mock(MemoryExtractionService.MemoryExtractionService)({});
 
 const layerPlatformTest = Layer.merge(
   NodeServices.layer,
@@ -274,7 +279,7 @@ const moveProject = (projectId: ProjectId, workspaceRoot: string, updatedAt: str
   );
 
 const layerTest = Layer.mergeAll(
-  RuntimeLayer.layer,
+  RuntimeLayer.layer.pipe(Layer.provide(layerMemoryExtractionTest)),
   RuntimeLayer.layerEventSink,
   ProjectStore.layer,
   ProjectionStore.layer,
@@ -294,6 +299,7 @@ const layerTest = Layer.mergeAll(
 );
 
 const layerLegacyImportTest = RuntimeLayer.layer.pipe(
+  Layer.provide(layerMemoryExtractionTest),
   Layer.provide(McpSessionRegistryTestkit.layer),
   Layer.provide(McpProviderSessions.layer),
   Layer.provideMerge(SqlitePersistence.layerMemory),
@@ -331,7 +337,10 @@ const layerResourceCleanupTest = ResourceCleanupService.layer.pipe(
 );
 
 const layerProjectDeletionTest = Layer.mergeAll(
-  RuntimeLayer.layer.pipe(Layer.provide(RuntimeLayer.layerProjectService)),
+  RuntimeLayer.layer.pipe(
+    Layer.provide(layerMemoryExtractionTest),
+    Layer.provide(RuntimeLayer.layerProjectService),
+  ),
   RuntimeLayer.layerProjectService,
   RuntimeLayer.layerEventSink,
   ThreadCommandExecutor.layer,
@@ -598,7 +607,10 @@ it.layer(layerProjectDeletionTest)("project deletion during thread commands", (i
 });
 
 const layerSharedApplicationDataPlaneTest = Layer.mergeAll(
-  RuntimeLayer.layer.pipe(Layer.provide(RuntimeLayer.layerProjectService)),
+  RuntimeLayer.layer.pipe(
+    Layer.provide(layerMemoryExtractionTest),
+    Layer.provide(RuntimeLayer.layerProjectService),
+  ),
   RuntimeLayer.layerProjectService,
   RuntimeLayer.layerEventSink,
   RuntimeLayer.layerEventInfrastructure,
@@ -7140,7 +7152,7 @@ const queueResumeDisabledInstanceProjectId = ProjectId.make(
 );
 
 const layerQueueResumeDisabledInstanceTest = Layer.mergeAll(
-  RuntimeLayer.layer,
+  RuntimeLayer.layer.pipe(Layer.provide(layerMemoryExtractionTest)),
   RuntimeLayer.layerEventSink,
   ProjectStore.layer,
   ProjectionStore.layer,

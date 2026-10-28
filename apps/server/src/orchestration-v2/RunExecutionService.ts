@@ -788,6 +788,24 @@ export const layer: Layer.Layer<
                       scopeId: input.checkpointScope.id,
                     },
                   },
+                  // Only completed turns are learned from. A stopped or failed
+                  // run's conversation is an interruption, not something the
+                  // agent should remember as its own conclusion.
+                  ...(input.terminal.status === "completed"
+                    ? [
+                        {
+                          id: `effect:memory.extract-turn:${input.run.id}`,
+                          commandId: CommandId.make(
+                            `command:effect:memory.extract-turn:${input.run.id}`,
+                          ),
+                          threadId: input.run.threadId,
+                          request: {
+                            type: "memory.extract-turn" as const,
+                            runId: input.run.id,
+                          },
+                        },
+                      ]
+                    : []),
                 ]
               : [],
           events: [

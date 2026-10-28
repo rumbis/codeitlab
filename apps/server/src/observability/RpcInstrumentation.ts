@@ -223,6 +223,7 @@ const RPC_AGGREGATES = {
   [WS_METHODS.codeitlabMemoryUpdate]: "codeitlab",
   [WS_METHODS.codeitlabMemoryDelete]: "codeitlab",
   [WS_METHODS.codeitlabMemoryStats]: "codeitlab",
+  [WS_METHODS.codeitlabMemorySoul]: "codeitlab",
   [WS_METHODS.codeitlabRoutingCatalog]: "codeitlab",
   [WS_METHODS.codeitlabRoutingDecide]: "codeitlab",
   [WS_METHODS.codeitlabRoutingHistory]: "codeitlab",

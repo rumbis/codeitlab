@@ -1,3 +1,4 @@
+import * as MemoryExtractionService from "../codeitlab/memory/MemoryExtractionService.ts";
 import * as SourceControlProviderRegistry from "../sourceControl/SourceControlProviderRegistry.ts";
 import * as McpProviderSessions from "@codeitlab/provider-core/server/McpProviderSessions";
 import * as NodeServices from "@effect/platform-node/NodeServices";
@@ -44,6 +45,10 @@ import * as RuntimeLayer from "./runtimeLayer.ts";
 import * as ProviderTurnStartServiceTestkit from "./ProviderTurnStartService.testkit.ts";
 import type * as ProviderAdapter from "@codeitlab/provider-core/server/ProviderAdapter";
 import * as ProviderContinuationRequests from "@codeitlab/provider-core/server/ProviderContinuationRequests";
+
+// Memory extraction is post-turn bookkeeping that needs the process-global
+// store; these suites are about delegated delivery, so it stays inert.
+const layerMemoryExtractionTest = Layer.mock(MemoryExtractionService.MemoryExtractionService)({});
 
 const layerPlatformTest = Layer.merge(
   NodeServices.layer,
@@ -106,6 +111,7 @@ const layerTestProviderInstanceRegistry = Layer.succeed(
 );
 
 const layerTest = Layer.mergeAll(RuntimeLayer.layer, RuntimeLayer.layerEventSink).pipe(
+  Layer.provide(layerMemoryExtractionTest),
   Layer.provideMerge(RuntimeLayer.layerProjectService),
   Layer.provide(
     Layer.mock(WorkspacePaths.WorkspacePaths)({

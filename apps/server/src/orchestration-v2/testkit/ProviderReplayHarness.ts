@@ -49,6 +49,7 @@ import * as ProviderTurnStartService from "../ProviderTurnStartService.ts";
 import * as ProviderTurnStartServiceTestkit from "../ProviderTurnStartService.testkit.ts";
 import * as McpAppModelContext from "../../mcpApps/McpAppModelContext.ts";
 import * as RunExecutionService from "../RunExecutionService.ts";
+import * as MemoryTurnExtractionService from "../MemoryTurnExtractionService.ts";
 import * as RunFinalizationService from "../RunFinalizationService.ts";
 import * as ThreadTitleRegenerationService from "../ThreadTitleRegenerationService.ts";
 import * as RuntimePolicy from "../RuntimePolicy.ts";
@@ -496,6 +497,11 @@ export function layerWithRegistry<Error>(
           ),
         )
       : Layer.empty;
+  // Memory extraction is post-turn bookkeeping; replay assertions are about
+  // provider turns, so it stays inert here rather than dragging the real store in.
+  const layerMemoryTurnExtractionTest = Layer.mock(
+    MemoryTurnExtractionService.MemoryTurnExtractionService,
+  )({});
   const layerEffectExecutorProvided = EffectWorker.layerExecutor.pipe(
     Layer.provide(
       Layer.mergeAll(
@@ -508,6 +514,7 @@ export function layerWithRegistry<Error>(
         layerThreadTitleRegenerationTest,
         layerServerSettings,
         layerThreadManagementProvided,
+        layerMemoryTurnExtractionTest,
       ),
     ),
   );
