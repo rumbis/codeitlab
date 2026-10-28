@@ -91,12 +91,15 @@ export const deriveProviderInstanceConfigMap = (
   return merged as ProviderInstanceConfigMap;
 };
 
-const layerSettingsWatcher = (settingsChanges: Stream.Stream<ServerSettings>) =>
+const layerSettingsWatcher = (
+  settingsChanges: Stream.Stream<ServerSettings>,
+  seedConfigMap: ProviderInstanceConfigMap,
+) =>
   Layer.effectDiscard(
     Effect.gen(function* () {
       const mutator = yield* ProviderInstanceRegistryMutator.ProviderInstanceRegistryMutator;
       const serverSettings = yield* Settings.ServerSettingsService;
-      yield* settingsChanges.pipe(
+      const consumeChanges = settingsChanges.pipe(
         Stream.runForEach(() =>
           // The subscription predates the seed read, so a queued change can be
           // older than the seed. A failed current read must leave the registry intact.
@@ -109,7 +112,17 @@ const layerSettingsWatcher = (settingsChanges: Stream.Stream<ServerSettings>) =>
             ),
           ),
         ),
-        Effect.forkScoped,
+      );
+      // Seeding runs in this same fiber ahead of the queued changes so layer
+      // construction never waits on provider startup while reconciles stay
+      // serialized in one consumer.
+      yield* Effect.forkScoped(
+        mutator.reconcile(seedConfigMap).pipe(
+          Effect.catchCause((cause) =>
+            Effect.logError("ProviderInstanceRegistry reconcile failed", cause),
+          ),
+          Effect.andThen(consumeChanges),
+        ),
       );
     }),
   );
@@ -134,13 +147,18 @@ export const layer: Layer.Layer<
     const layerMutable = ProviderInstanceRegistry.layer({
       drivers: BUILT_IN_DRIVERS,
       configMap: initialConfigMap,
+      // The watcher below seeds from the settings snapshot in a background
+      // fiber, so registry construction doesn't wait on provider startup.
+      seed: false,
     }).pipe(
       Layer.provide(ProviderOrchestrationAdapterInfrastructure.layer),
       Layer.provide(AcpRegistrySupport.layerFromHost),
       Layer.provide(ProviderHostLive.layer),
     );
 
-    return layerSettingsWatcher(settingsChanges).pipe(Layer.provideMerge(layerMutable));
+    return layerSettingsWatcher(settingsChanges, initialConfigMap).pipe(
+      Layer.provideMerge(layerMutable),
+    );
   }),
 ) as Layer.Layer<
   ProviderInstanceRegistry.ProviderInstanceRegistry,

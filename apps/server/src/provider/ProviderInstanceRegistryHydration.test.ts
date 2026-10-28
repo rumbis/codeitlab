@@ -1,14 +1,23 @@
+import { it as itEffect } from "@effect/vitest";
 import {
   DEFAULT_CODEITLAB_SETTINGS,
   DEFAULT_SERVER_SETTINGS,
   ProjectId,
   ProviderDriverKind,
   ProviderInstanceId,
+  type ProviderInstanceConfigMap,
   type ServerSettings,
 } from "@codeitlab/contracts";
-import { describe, expect, it } from "vite-plus/test";
+import type { AnyProviderDriver, ProviderInstance } from "@codeitlab/provider-core/server/driver";
+import * as Deferred from "effect/Deferred";
+import * as Effect from "effect/Effect";
+import * as Schema from "effect/Schema";
+import { describe, expect, it, vi } from "vite-plus/test";
 
+import { makeProviderInstanceRegistry } from "./ProviderInstanceRegistry.ts";
 import { deriveProviderInstanceConfigMap } from "./ProviderInstanceRegistryHydration.ts";
+
+vi.mock("@anthropic-ai/claude-agent-sdk", { spy: true });
 
 const projectId = ProjectId.make("project-a");
 const instanceId = ProviderInstanceId.make("codex_work");
@@ -195,4 +204,50 @@ describe("deriveProviderInstanceConfigMap custom ACP agents", () => {
       commandPath: "custom-agent",
     });
   });
+});
+
+// The seed contract the hydration layer depends on: with seed: false the reconcile is the caller's
+// job, so construction returns while a provider startup is still in flight.
+describe("ProviderInstanceRegistryHydration seeder", () => {
+  itEffect.live("makes the registry without waiting on the seed it asks callers to run", () =>
+    Effect.gen(function* () {
+      const seedStarted = yield* Deferred.make<void>();
+      const seedRelease = yield* Deferred.make<void>();
+
+      // A driver whose create parks is enough here: reconcile awaits create, so a build that ran the
+      // seed inline would park inside construction and never return.
+      const blockingDriver: AnyProviderDriver<never> = {
+        driverKind: ProviderDriverKind.make("codex"),
+        metadata: { displayName: "Blocking" },
+        configSchema: Schema.Unknown,
+        defaultConfig: () => ({}),
+        create: () =>
+          Deferred.succeed(seedStarted, undefined).pipe(
+            Effect.andThen(Deferred.await(seedRelease)),
+            Effect.as({}),
+          ) as Effect.Effect<ProviderInstance, never, never>,
+      } as unknown as AnyProviderDriver<never>;
+
+      const configMap = {
+        [instanceId]: {
+          driver: ProviderDriverKind.make("codex"),
+          enabled: true,
+          config: {},
+        },
+      } satisfies ProviderInstanceConfigMap;
+
+      // seed: false is what the hydration layer passes. Returning here is the whole point.
+      const { registry, mutator } = yield* makeProviderInstanceRegistry({
+        drivers: [blockingDriver],
+        configMap,
+        seed: false,
+      });
+      expect(yield* registry.listInstances).toEqual([]);
+
+      // The caller's seed is the one that reaches the driver.
+      yield* mutator.reconcile(configMap).pipe(Effect.ignoreCause, Effect.forkChild);
+      yield* Deferred.await(seedStarted);
+      yield* Deferred.succeed(seedRelease, undefined);
+    }),
+  );
 });

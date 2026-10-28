@@ -267,6 +267,7 @@ export const makeProviderInstanceRegistry = Effect.fn(
 )(function* <R>(input: {
   readonly drivers: ReadonlyArray<AnyProviderDriver<R>>;
   readonly configMap: ProviderInstanceConfigMap;
+  readonly seed?: boolean | undefined;
 }): Effect.fn.Return<
   {
     readonly registry: ProviderInstanceRegistry["Service"];
@@ -297,7 +298,12 @@ export const makeProviderInstanceRegistry = Effect.fn(
   const reconcile: ProviderInstanceRegistryMutator.ProviderInstanceRegistryMutatorShape["reconcile"] =
     (configMap) => reconcileWithR(configMap).pipe(Effect.provideContext(driverContext));
 
-  yield* reconcile(input.configMap);
+  // Blocking here puts provider startup (ACP catalog probing can take minutes)
+  // on the boot critical path, so the hydration layer passes seed: false and
+  // seeds from its background fiber instead.
+  if (input.seed !== false) {
+    yield* reconcile(input.configMap);
+  }
 
   const registry: ProviderInstanceRegistry["Service"] = {
     getInstance: (id) => Ref.get(entries).pipe(Effect.map((map) => map.get(id)?.instance)),
@@ -328,6 +334,7 @@ export const makeProviderInstanceRegistry = Effect.fn(
 export const layer = <R>(input: {
   readonly drivers: ReadonlyArray<AnyProviderDriver<R>>;
   readonly configMap: ProviderInstanceConfigMap;
+  readonly seed?: boolean | undefined;
 }): Layer.Layer<
   ProviderInstanceRegistry | ProviderInstanceRegistryMutator.ProviderInstanceRegistryMutator,
   never,
