@@ -1,0 +1,7 @@
+<svg width="128" height="128" viewBox="0 0 128 128" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <!-- CodeItLab original mark (dev variant): cyan ring, phosphor node core. -->
+  <path d="M79.45 38.28A30 30 0 1 1 76.68 36.81" stroke="#22D3EE" stroke-width="7.75" stroke-linecap="round"/>
+  <path d="M64 50.6L75.6 57.3V70.7L64 77.4L52.4 70.7V57.3L64 50.6Z" stroke="#3DFF9E" stroke-width="3.75" stroke-linejoin="round"/>
+  <path d="M70.3 52.2L84.1 26.1" stroke="#3DFF9E" stroke-width="3.4" stroke-linecap="round"/>
+  <circle cx="84.1" cy="26.1" r="4.4" fill="#3DFF9E"/>
+</svg>

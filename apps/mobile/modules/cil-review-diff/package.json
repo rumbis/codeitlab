@@ -1,0 +1,17 @@
+{
+  "name": "@codeitlab/mobile-review-diff-native",
+  "version": "0.0.0",
+  "private": true,
+  "expo-module": {
+    "ios": {
+      "modules": [
+        "CilReviewDiffModule"
+      ]
+    },
+    "android": {
+      "modules": [
+        "expo.modules.cilreviewdiff.CilReviewDiffModule"
+      ]
+    }
+  }
+}

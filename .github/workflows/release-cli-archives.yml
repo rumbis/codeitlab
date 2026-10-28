@@ -1,0 +1,209 @@
+name: Release CLI archives
+
+# Builds the per-platform CLI archives that `npx codeitlab` downloads
+# (codeitlab-<version>-<platform>-<arch>.tar.gz|zip + SHA256SUMS) and attaches them to
+# a GitHub Release. Native builds only: no signing secrets required (macOS gets
+# an ad-hoc signature), so a fork can ship the CLI without the desktop pipeline.
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Version to package (must match the release tag)"
+        required: true
+        default: "0.3.0"
+        type: string
+      release_tag:
+        description: "GitHub Release tag to attach the archives to"
+        required: true
+        default: "v0.3.0"
+        type: string
+  push:
+    tags:
+      - "cli-v*"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-cli-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build:
+    name: Build ${{ matrix.key }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - key: darwin-arm64
+            os: macos-14
+            platform: mac
+            arch: arm64
+          - key: linux-x64
+            os: ubuntu-24.04
+            platform: linux
+            arch: x64
+          - key: linux-arm64
+            os: ubuntu-24.04-arm
+            platform: linux
+            arch: arm64
+          - key: win-x64
+            os: windows-2025
+            platform: win
+            arch: x64
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      # The single-executable needs a host Node with --build-sea (25.7+), so the
+      # repo's ^24.13.1 engine is not enough for this job.
+      - name: Setup Node 26
+        uses: actions/setup-node@v4
+        with:
+          node-version: 26
+
+      - name: Install pnpm
+        shell: bash
+        run: |
+          npm install -g pnpm@11.10.0
+          pnpm --version
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Put local binaries on PATH
+        shell: bash
+        run: |
+          bin="$PWD/node_modules/.bin"
+          # Git Bash's $PWD is a POSIX path; the runner needs a native one.
+          if [[ "$RUNNER_OS" == "Windows" ]]; then
+            bin="$(cygpath -w "$bin")"
+          fi
+          echo "$bin" >> "$GITHUB_PATH"
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Build resource monitor
+        run: cargo build --locked --release --manifest-path native/resource-monitor/Cargo.toml
+
+      - name: Build web client
+        run: pnpm --filter @codeitlab/web build
+
+      - name: Bundle server
+        run: node apps/server/scripts/cli.ts build
+
+      - name: Build single executable
+        run: node apps/server/scripts/cli.ts build-exe --verbose
+
+      - name: Check the release manifests match the tagged version
+        shell: bash
+        run: |
+          set -euo pipefail
+          # Archives are named from the tag while the packaged CLI reports
+          # apps/server/package.json, so a tag without a matching bump ships a
+          # binary that disagrees with its own filename. Base version only, so
+          # `-nightly.N` dispatches still work.
+          version="${{ github.event_name == 'workflow_dispatch' && inputs.version || github.ref_name }}"
+          version="${version#cli-v}"
+          manifest="$(node -p "require('./apps/server/package.json').version")"
+          if [[ "${version%%-*}" != "${manifest%%-*}" ]]; then
+            echo "::error::apps/server/package.json is $manifest but this build packages $version; run node scripts/update-release-package-versions.ts ${version%%-*} and commit it before tagging"
+            exit 1
+          fi
+
+      - name: Assemble CLI archive
+        shell: bash
+        run: |
+          set -euo pipefail
+          version="${{ github.event_name == 'workflow_dispatch' && inputs.version || github.ref_name }}"
+          version="${version#cli-v}"
+          resource_monitor="cil-resource-monitor"
+          if [[ "${{ matrix.platform }}" == "win" ]]; then
+            resource_monitor="${resource_monitor}.exe"
+          fi
+          mkdir -p cli-resource-monitor
+          cp "native/resource-monitor/target/release/${resource_monitor}" "cli-resource-monitor/${resource_monitor}"
+          node scripts/build-cli-archive.ts \
+            --platform "${{ matrix.platform }}" \
+            --arch "${{ matrix.arch }}" \
+            --version "$version" \
+            --resource-monitor-dir cli-resource-monitor \
+            --output-dir release-cli
+
+      - name: Upload archive
+        uses: actions/upload-artifact@v4
+        with:
+          name: cli-${{ matrix.key }}
+          # Only our own archives: anything else in the output directory is a
+          # stray checkout file, not a build product.
+          path: release-cli/codeitlab-*
+          if-no-files-found: error
+
+  publish:
+    name: Attach archives to the release
+    needs: build
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - name: Download archives
+        uses: actions/download-artifact@v4
+        with:
+          path: release-cli
+          merge-multiple: true
+
+      # Hash the files we are about to upload rather than trusting per-job
+      # checksums: an artifact that changes in transit must not produce a
+      # SHA256SUMS that disagrees with the published archive.
+      - name: Build SHA256SUMS
+        shell: bash
+        run: |
+          set -euo pipefail
+          node -e '
+            const { createHash } = require("node:crypto");
+            const fs = require("node:fs");
+            const dir = "release-cli";
+            const archives = fs
+              .readdirSync(dir)
+              .filter((name) => /\.(tar\.gz|zip)$/.test(name));
+            // A leftover archive in the checkout would be hashed and republished
+            // over a legacy release asset. Fail loudly instead of hiding it.
+            const stray = archives.filter((name) => !name.startsWith("codeitlab-"));
+            if (stray.length > 0) {
+              console.error(`::error::unexpected archives in ${dir}: ${stray.join(", ")}`);
+              process.exit(1);
+            }
+            const lines = archives
+              .sort()
+              .map((name) => {
+                const hash = createHash("sha256")
+                  .update(fs.readFileSync(`${dir}/${name}`))
+                  .digest("hex");
+                return `${hash}  ${name}`;
+              });
+            fs.writeFileSync(`${dir}/SHA256SUMS`, `${lines.join("\n")}\n`);
+            console.log(lines.join("\n"));
+          '
+
+      - name: Upload to GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          raw="${{ github.event_name == 'workflow_dispatch' && inputs.release_tag || github.ref_name }}"
+          # Every client resolves archives under v<version> — scripts/install.sh
+          # matches a `v<semver>` tag and scripts/npm-launcher downloads
+          # releases/download/v${version}. A cli-v* trigger tag is only the
+          # build signal, so normalize it onto the v<version> release.
+          tag="$raw"
+          case "$raw" in
+            cli-v*) tag="v${raw#cli-v}" ;;
+          esac
+          echo "publishing $tag"
+          if ! gh release view "$tag" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            gh release create "$tag" --repo "$GITHUB_REPOSITORY" --title "$tag" --notes "CodeItLab CLI archives"
+          fi
+          gh release upload "$tag" release-cli/codeitlab-* release-cli/SHA256SUMS --repo "$GITHUB_REPOSITORY" --clobber

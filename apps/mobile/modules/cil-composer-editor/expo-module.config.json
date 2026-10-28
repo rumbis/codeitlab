@@ -1,0 +1,9 @@
+{
+  "platforms": ["apple", "android"],
+  "apple": {
+    "modules": ["CilComposerEditorModule"]
+  },
+  "android": {
+    "modules": ["expo.modules.cilcomposereditor.CilComposerEditorModule"]
+  }
+}

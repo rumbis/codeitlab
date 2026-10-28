@@ -1,0 +1,68 @@
+@import "tailwindcss";
+
+@theme inline {
+  --font-sans: var(--cil-font-sans);
+  --font-mono: var(--cil-font-mono);
+  --color-background: var(--cil-background);
+  --color-foreground: var(--cil-foreground);
+  --color-popover: var(--cil-popover);
+  --color-popover-foreground: var(--cil-popover-foreground);
+  --color-primary: var(--cil-primary);
+  --color-primary-foreground: var(--cil-primary-foreground);
+  --color-muted: var(--cil-muted);
+  --color-muted-foreground: var(--cil-muted-foreground);
+  --color-accent: var(--cil-accent);
+  --color-accent-foreground: var(--cil-accent-foreground);
+  --color-border: var(--cil-border);
+  --color-input: var(--cil-input);
+  --color-ring: var(--cil-ring);
+  --radius-sm: calc(var(--cil-radius) - 4px);
+  --radius-md: calc(var(--cil-radius) - 2px);
+  --radius-lg: var(--cil-radius);
+  --radius-xl: calc(var(--cil-radius) + 4px);
+  --radius-2xl: calc(var(--cil-radius) + 8px);
+}
+
+:host {
+  --cil-font-sans:
+    "DM Sans Variable", "DM Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui,
+    sans-serif;
+  --cil-font-mono:
+    "SF Mono", "SFMono-Regular", "JetBrains Mono", Consolas, "Liberation Mono", Menlo, monospace;
+  --cil-radius: 0.625rem;
+  --cil-background: white;
+  --cil-foreground: oklch(0.269 0 0);
+  --cil-popover: white;
+  --cil-popover-foreground: oklch(0.269 0 0);
+  --cil-primary: oklch(0.488 0.217 264);
+  --cil-primary-foreground: white;
+  --cil-muted: rgb(0 0 0 / 4%);
+  --cil-muted-foreground: oklch(0.556 0 0);
+  --cil-accent: rgb(0 0 0 / 4%);
+  --cil-accent-foreground: oklch(0.269 0 0);
+  --cil-border: rgb(0 0 0 / 8%);
+  --cil-input: rgb(0 0 0 / 10%);
+  --cil-ring: oklch(0.488 0.217 264);
+  color: var(--cil-foreground);
+  font-family: var(--cil-font-sans);
+}
+
+* {
+  box-sizing: border-box;
+  border-color: var(--cil-border);
+}
+
+button,
+input,
+select,
+textarea {
+  font: inherit;
+}
+
+button:focus-visible,
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--cil-ring) 72%, transparent);
+  outline-offset: -2px;
+}

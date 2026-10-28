@@ -1,0 +1,7 @@
+# /etc/cron.d/codeitlab-backup
+# Consistent SQLite copy every night at 03:10, kept off the database disk.
+# The script verifies the copy with PRAGMA integrity_check and exits 1 if it is
+# not usable, so a failing backup shows up in cron mail instead of silence.
+10 3 * * * codeitlab cd /opt/codeitlab/apps/marketplace && \
+  set -a && . /etc/codeitlab/marketplace.env && set +a && \
+  node scripts/backup.ts --dir=/var/backups/codeitlab >> /var/log/codeitlab-backup.log 2>&1
