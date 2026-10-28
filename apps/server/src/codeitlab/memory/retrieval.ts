@@ -62,10 +62,14 @@ const STOPWORDS = new Set([
   "also",
 ]);
 
+// Splitting on ASCII only silently erased every non-Latin word, so a memory
+// written in Greek scored zero against a Greek query and was never recalled.
+// Unicode letter classes keep any script searchable without a per-language list.
 export const tokenizeMemoryText = (text: string): ReadonlyArray<string> =>
   text
     .toLowerCase()
-    .split(/[^a-z0-9_]+/u)
+    .normalize("NFKC")
+    .split(/[^\p{L}\p{N}_]+/u)
     .filter((token) => token.length > 1 && !STOPWORDS.has(token));
 
 const entryTokens = (entry: MemoryEntry): ReadonlyArray<string> =>

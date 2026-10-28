@@ -16,7 +16,12 @@ import {
   normalizeMemoryText,
 } from "./extraction.ts";
 import { containsSecret, redactSecrets } from "./redaction.ts";
-import { filterMemoriesForScope, rankMemoryEntries, renderMemoryRecall } from "./retrieval.ts";
+import {
+  filterMemoriesForScope,
+  rankMemoryEntries,
+  renderMemoryRecall,
+  tokenizeMemoryText,
+} from "./retrieval.ts";
 
 const entry = (overrides: Partial<MemoryEntry> = {}): MemoryEntry => ({
   id: "mem_1",
@@ -101,6 +106,50 @@ describe("memory extraction", () => {
     );
     assert.strictEqual(normalizeMemoryText("  a   b  "), "a b");
   });
+
+  // "\b" is defined against ASCII \w, so it never matched before or after a
+  // Greek letter. A Greek-speaking user got silence from every phrasing.
+  it("extracts a remembered fact stated in Greek", () => {
+    const candidates = extractMemoryCandidates({
+      prompt: "Θυμήσου ότι είμαι ο Γιώργος από τη Λευκωσία",
+    });
+    assert.strictEqual(candidates.length, 1);
+    assert.strictEqual(candidates[0]!.text, "είμαι ο Γιώργος από τη Λευκωσία");
+  });
+
+  it("strips a Greek lead-in whether or not it uses a colon", () => {
+    const withColon = extractMemoryCandidates({
+      prompt: "Θυμήσου: να τρέχεις vp fmt πριν από κάθε commit",
+    });
+    assert.strictEqual(withColon.length, 1);
+    assert.strictEqual(withColon[0]!.text.includes("Θυμήσου"), false);
+
+    const order = extractMemoryCandidates({
+      prompt: "Γράψε στη μνήμη σου ότι το staging είναι εσωτερικό",
+    });
+    assert.strictEqual(order.length, 1);
+    assert.strictEqual(order[0]!.text, "το staging είναι εσωτερικό");
+  });
+
+  // An introduction is who the agent works with, not a project fact, so it has
+  // to land in USER.md. The marker sets confidence; it must not set the kind.
+  it("files a self-introduction under preference, not fact", () => {
+    for (const prompt of [
+      "Θυμήσου ότι είμαι ο Γιώργος από τη Λευκωσία",
+      "remember: I am George from Nicosia",
+    ]) {
+      const candidates = extractMemoryCandidates({ prompt });
+      assert.strictEqual(candidates.length, 1, prompt);
+      assert.strictEqual(candidates[0]!.kind, "preference", prompt);
+    }
+  });
+
+  it("does not treat the middle of a Greek word as a marker", () => {
+    const candidates = extractMemoryCandidates({
+      prompt: "Ξεθυμήσου ότι δεν ισχύει πια αυτός ο κανόνας για εμάς",
+    });
+    assert.strictEqual(candidates.length, 0);
+  });
 });
 
 describe("memory retrieval", () => {
@@ -119,6 +168,28 @@ describe("memory retrieval", () => {
     assert.strictEqual(hits.length > 0, true);
     assert.strictEqual(hits[0]?.entry.id, "mem_a");
     assert.strictEqual((hits[0]?.score ?? 0) > 0, true);
+  });
+
+  // Splitting on [^a-z0-9_] dropped every non-Latin word, so a memory written
+  // in Greek tokenized to nothing and could never be recalled by a Greek query.
+  it("tokenizes and ranks memories written in a non-Latin script", () => {
+    assert.deepStrictEqual(tokenizeMemoryText("Ο χρήστης μένει στη Λευκωσία"), [
+      "χρήστης",
+      "μένει",
+      "στη",
+      "λευκωσία",
+    ]);
+
+    const greek = [
+      entry({ id: "el", text: "Ο χρήστης λέγεται Γιώργος και μένει στη Λευκωσία." }),
+      entry({ id: "el2", text: "Η ανάπτυξη γίνεται με pnpm και vp test run." }),
+    ];
+    const hits = rankMemoryEntries(greek, "Γιώργος Λευκωσία", {
+      nowMs: Date.parse("2026-10-02T00:00:00.000Z"),
+      limit: 3,
+      minScore: 0,
+    });
+    assert.strictEqual(hits[0]?.entry.id, "el");
   });
 
   it("scopes project recall to global plus the same project", () => {

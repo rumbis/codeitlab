@@ -37,10 +37,25 @@ interface ExtractionRule {
 
 /** Strong first-person statements are the highest-signal durable facts. */
 const PROMPT_RULES: ReadonlyArray<ExtractionRule> = [
+  // Self-introduction ("I am X", "εγώ είμαι ο X") is who the agent is working
+  // with, which the soul renders into USER.md rather than the project corpus.
+  {
+    kind: "preference",
+    confidence: 0.8,
+    pattern:
+      /\b(?:i\s+am|i'?m|my\s+name\s+is|call\s+me)\b|(?<![\p{L}\p{N}_])(?:εγώ\s+)?είμαι\s+ο(?![\p{L}\p{N}_])|(?<![\p{L}\p{N}_])με\s+λένε(?![\p{L}\p{N}_])/iu,
+  },
   {
     kind: "preference",
     confidence: 0.85,
-    pattern: /\b(?:i|we)\s+(?:prefer|always|never|want|like|hate|don'?t want)\b/i,
+    pattern: /\b(?:i)\s+(?:prefer|always|never|want|like|hate|don'?t want)\b/i,
+  },
+  // "we always ..." describes the project, not the person, so it must not reach
+  // USER.md. Splitting the subject is what keeps the soul about one human.
+  {
+    kind: "convention",
+    confidence: 0.85,
+    pattern: /\b(?:we)\s+(?:prefer|always|never|want|like|hate|don'?t want)\b/i,
   },
   {
     kind: "preference",
@@ -106,8 +121,29 @@ const ASSISTANT_RULES: ReadonlyArray<ExtractionRule> = [
   },
 ];
 
-const EXPLICIT_MARKER = /\b(?:memory|remember)\s*[:：]\s*(?=\S)/i;
-const EXPLICIT_MARKER_GLOBAL = /\b(?:memory|remember)\s*[:：]\s*/gi;
+// "\b" is defined against ASCII \w, so it never matches before a Greek letter:
+// /\bθυμήσου/iu fails against "Θυμήσου". A negated-letter lookbehind is the
+// unicode-correct equivalent, so the same prefix rule works in both languages.
+const LEAD = "(?<![\\p{L}\\p{N}_])";
+
+// The Greek forms are spelled out rather than inferred from the English rule:
+// "θυμήσου" carries the request as a verb prefix, so the marker is a phrasal
+// lead-in ("θυμήσου ότι", "γράψε στη μνήμη σου ότι") that also has to be removed
+// before the fact is stored, or the memory reads as an order instead of a fact.
+const EXPLICIT_MARKER = new RegExp(
+  LEAD +
+    "(?:(?:memory|remember)\\s*[:：]|θυμήσου\\s*[:：,]?\\s*(?:ότι|πως)?|" +
+    "γράψε\\s+(?:στη|στην|σε)\\s+μνήμη\\s+σου|κράτα\\s+στη\\s+μνήμη\\s+σου|" +
+    "σημείωσε\\s+(?=ότι|πως)|μην\\s+ξεχάσεις\\s+(?=ότι|πως))",
+  "iu",
+);
+const EXPLICIT_MARKER_GLOBAL = new RegExp(
+  LEAD +
+    "(?:(?:memory|remember)\\s*[:：]|θυμήσου\\s*[:：,]\\s*|θυμήσου\\s+|" +
+    "γράψε\\s+(?:στη|στην|σε)\\s+μνήμη\\s+σου\\s*|κράτα\\s+στη\\s+μνήμη\\s+σου\\s*|" +
+    "σημείωσε\\s+|μην\\s+ξεχάσεις\\s+)",
+  "giu",
+);
 
 const stripMarkdown = (sentence: string): string =>
   sentence
@@ -225,8 +261,14 @@ export const extractMemoryCandidates = (input: ExtractionInput): ReadonlyArray<M
   for (const sentence of splitSentences(input.prompt)) {
     const explicit = EXPLICIT_MARKER.test(sentence);
     if (explicit) {
-      const text = sentence.replace(EXPLICIT_MARKER_GLOBAL, "");
-      const candidate = toCandidate(text, { kind: "fact", confidence: 0.9 });
+      const text = sentence.replace(EXPLICIT_MARKER_GLOBAL, "").replace(/^(?:ότι|πως)\s+/iu, "");
+      // "remember: I am George" is still an introduction, so an explicit marker
+      // sets confidence but must not override what the sentence turns out to be.
+      const identityKind = matchRule(text, PROMPT_RULES)?.kind;
+      const candidate = toCandidate(text, {
+        kind: identityKind === "preference" ? "preference" : "fact",
+        confidence: 0.9,
+      });
       if (candidate !== undefined) candidates.push(candidate);
       continue;
     }
