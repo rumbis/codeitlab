@@ -16,6 +16,7 @@ import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
 import * as Fiber from "effect/Fiber";
 import * as Layer from "effect/Layer";
+import * as Option from "effect/Option";
 import * as Sink from "effect/Sink";
 import * as Stream from "effect/Stream";
 import * as Schema from "effect/Schema";
@@ -499,6 +500,57 @@ describe("AcpRegistrySupport", () => {
     );
   });
 
+  it.effect("finishes an interrupted install so the next resolve does not reinstall", () => {
+    // The probe gives resolve one minute while an install gets twenty. Installing
+    // inside the caller meant a deadline left the package on disk with no receipt,
+    // so every later launch repeated the same slow install.
+    const agent = makeAgent({ npx: { package: "@example/acp@1.2.3", args: ["--stdio"] } });
+    return Effect.gen(function* () {
+      const fileSystem = yield* FileSystem.FileSystem;
+      const cacheDir = yield* fileSystem.makeTempDirectoryScoped({
+        prefix: "cil-acp-registry-interrupted-install-",
+      });
+      const toolchain = yield* makeFakeNpmToolchain(cacheDir);
+      const environment = { ...toolchain.environment, FAKE_NPM_INSTALL_SECONDS: "1" };
+      const catalog = yield* AcpRegistrySupport.makeAcpRegistryCatalog({
+        cacheDir,
+        toolsDir: `${cacheDir}/tools`,
+        registryUrl,
+      }).pipe(Effect.provideService(HostProcess.Environment, environment));
+
+      const installCount = () =>
+        fileSystem
+          .readFileString(toolchain.logPath)
+          .pipe(Effect.map((log) => log.match(/^install --global /gmu)?.length ?? 0));
+
+      // Abandon the caller the way an expired probe does. The install has to be
+      // past its spawning point by then, so wait for the npm line it writes.
+      const resolve = yield* catalog
+        .resolve(settings(), "/workspace", environment)
+        .pipe(Effect.forkChild);
+      yield* Effect.gen(function* () {
+        while ((yield* installCount()) === 0) yield* Effect.yieldNow;
+      }).pipe(Effect.timeout("10 seconds"));
+
+      yield* Fiber.interrupt(resolve);
+      // The caller is gone while its install is still sleeping in npm.
+      expect(yield* installCount()).toBe(1);
+      yield* TestClock.adjust("20 seconds");
+
+      const retried = yield* catalog.resolve(settings(), "/workspace", environment);
+      expect(retried.spawn.command).toBe(toolchain.executablePath);
+      // Installing in the caller's scope tore the child down with it and left no
+      // receipt, so this second resolve installed a second time.
+      expect(yield* installCount()).toBe(1);
+    }).pipe(
+      Effect.scoped,
+      Effect.provide(
+        layerResolver((request) =>
+          Effect.succeed(HttpClientResponse.fromWeb(request, new Response(makeRegistry(agent)))),
+        ),
+      ),
+    );
+  });
   it.effect("uses its managed prefix despite a system-owned npm prefix", () => {
     const agent = makeAgent({ npx: { package: "@example/acp@1.2.3" } });
     return Effect.gen(function* () {

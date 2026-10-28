@@ -10,6 +10,7 @@ if [ "$1" = "prefix" ] && [ "$2" = "--global" ]; then
   exit 0
 fi
 if [ "$1" = "install" ] && [ "$2" = "--global" ]; then
+  if [ -n "$FAKE_NPM_INSTALL_SECONDS" ]; then sleep "$FAKE_NPM_INSTALL_SECONDS"; fi
   package_root="$prefix/lib/node_modules/@example/acp"
   executable="$prefix/bin/example-agent"
   mkdir -p "$package_root" "$prefix/bin"

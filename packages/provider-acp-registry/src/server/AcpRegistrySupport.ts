@@ -32,7 +32,9 @@ import * as Option from "effect/Option";
 import * as Path from "effect/Path";
 import * as AcpRegistryRuntimeCoordinator from "./AcpRegistryRuntimeCoordinator.ts";
 import * as PlatformError from "effect/PlatformError";
+import * as Deferred from "effect/Deferred";
 import * as Ref from "effect/Ref";
+import * as Scope from "effect/Scope";
 import * as Schema from "effect/Schema";
 import * as Semaphore from "effect/Semaphore";
 import * as Stream from "effect/Stream";
@@ -1195,6 +1197,18 @@ export const makeAcpRegistryCatalog = Effect.fn("AcpRegistryCatalog.make")(funct
     },
   );
 
+  // An install takes far longer than the probe budget that awaits it, so it runs
+  // in a scope owned by the catalog rather than the caller. A caller that gives
+  // up leaves the install running to completion, which is what writes the
+  // receipt that stops the next launch from installing again. The scope only
+  // ever holds installs that are still running, and each one removes its entry
+  // as it settles, so it does not accumulate fibers.
+  const installScope = yield* Scope.make("sequential");
+  const runningInstalls = new Map<
+    string,
+    Deferred.Deferred<AcpRegistryPackageInstallReceipt, AcpRegistryError>
+  >();
+
   const ensureGlobalPackage = Effect.fn("AcpRegistryCatalog.ensureGlobalPackage")(function* (
     agent: AcpRegistryAgent,
     distribution: "npx" | "uvx",
@@ -1253,27 +1267,24 @@ export const makeAcpRegistryCatalog = Effect.fn("AcpRegistryCatalog.make")(funct
 
     const managerDirectory = yield* managerBinDirectory(managerPath);
     const installEnvironment = withPreferredPath(packageEnvironment, managerDirectory, platform);
-    if (distribution === "npx") {
-      yield* runCommand(managerPath, ["install", "--global", packageSpec], {
-        env: installEnvironment,
-        timeout: PACKAGE_INSTALL_TIMEOUT,
-        truncatedOutputReason: "install_failed",
-      });
-    } else {
-      yield* runCommand(managerPath, ["tool", "install", "--force", packageSpec], {
-        env: installEnvironment,
-        timeout: PACKAGE_INSTALL_TIMEOUT,
-        truncatedOutputReason: "install_failed",
-      });
-    }
-
-    if (distribution === "npx") {
-      const installed = yield* discoverNpmGlobalPackage(
-        agent,
-        packageSpec,
-        managerPath,
-        packageEnvironment,
-      );
+    const runInstall = Effect.gen(function* () {
+      if (distribution === "npx") {
+        yield* runCommand(managerPath, ["install", "--global", packageSpec], {
+          env: installEnvironment,
+          timeout: PACKAGE_INSTALL_TIMEOUT,
+          truncatedOutputReason: "install_failed",
+        });
+      } else {
+        yield* runCommand(managerPath, ["tool", "install", "--force", packageSpec], {
+          env: installEnvironment,
+          timeout: PACKAGE_INSTALL_TIMEOUT,
+          truncatedOutputReason: "install_failed",
+        });
+      }
+      const installed =
+        distribution === "npx"
+          ? yield* discoverNpmGlobalPackage(agent, packageSpec, managerPath, packageEnvironment)
+          : yield* discoverUvGlobalPackage(agent, packageSpec, managerPath, packageEnvironment);
       if (Option.isNone(installed)) {
         return yield* new AcpRegistryError({
           reason: "install_failed",
@@ -1282,22 +1293,29 @@ export const makeAcpRegistryCatalog = Effect.fn("AcpRegistryCatalog.make")(funct
       }
       yield* writePackageReceipt(installed.value);
       return installed.value;
-    }
+    });
 
-    const installed = yield* discoverUvGlobalPackage(
-      agent,
-      packageSpec,
-      managerPath,
-      packageEnvironment,
+    // Share one install between concurrent callers and keep it alive past the
+    // caller that started it.
+    const installKey = `${distribution}:${packageSpec}:${managerPath}`;
+    const inFlight = runningInstalls.get(installKey);
+    if (inFlight !== undefined) return yield* Deferred.await(inFlight);
+    const deferred = yield* Deferred.make<AcpRegistryPackageInstallReceipt, AcpRegistryError>();
+    runningInstalls.set(installKey, deferred);
+    const settle = runInstall.pipe(
+      Effect.onExit((exit) =>
+        Deferred.done(deferred, exit).pipe(
+          Effect.andThen(
+            Effect.sync(() => {
+              runningInstalls.delete(installKey);
+            }),
+          ),
+          Effect.ignore,
+        ),
+      ),
     );
-    if (Option.isNone(installed)) {
-      return yield* new AcpRegistryError({
-        reason: "install_failed",
-        detail: `ACP Registry installed ${packageSpec}, but could not resolve its global command.`,
-      });
-    }
-    yield* writePackageReceipt(installed.value);
-    return installed.value;
+    yield* Effect.forkIn(installScope)(settle);
+    return yield* Deferred.await(deferred);
   });
 
   const acquireInstallLock = Effect.fn("AcpRegistryCatalog.acquireInstallLock")(function* (
@@ -1853,13 +1871,13 @@ export const makeAcpRegistryCatalog = Effect.fn("AcpRegistryCatalog.make")(funct
         command = resolvedOverride;
         args = distribution.args;
       } else if (distribution.kind === "npx" || distribution.kind === "uvx") {
-        const installed = yield* installSemaphore.withPermits(1)(
-          ensureGlobalPackage(
-            agent,
-            distribution.kind,
-            distribution.packageName!,
-            effectiveEnvironment,
-          ),
+        // ensureGlobalPackage shares one in-flight install between callers, so the
+        // caller is never held past its own deadline by a permit.
+        const installed = yield* ensureGlobalPackage(
+          agent,
+          distribution.kind,
+          distribution.packageName!,
+          effectiveEnvironment,
         );
         command = installed.executablePath;
         args = distribution.args;
