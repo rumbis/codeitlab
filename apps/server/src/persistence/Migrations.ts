@@ -170,7 +170,7 @@ const FIRST_V2_MIGRATION_ID = 55;
  * silently stay missing. Accept the recorded spelling; the migrator itself only
  * looks at ids.
  */
-const RECORDED_MIGRATION_NAME_ALIASES: ReadonlyMap<string, string> = new Map([
+export const RECORDED_MIGRATION_NAME_ALIASES: ReadonlyMap<string, string> = new Map([
   ["CodeitlabTasks", "CodeItLabTasks"],
   ["CodeitlabTaskCompletion", "CodeItLabTaskCompletion"],
   ["CodeitlabTaskStartedAt", "CodeItLabTaskStartedAt"],

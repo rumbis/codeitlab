@@ -16,7 +16,11 @@ import * as SqlClient from "effect/sql/SqlClient";
 import { Command, Flag } from "effect/cli";
 
 import * as ProjectionStore from "../src/orchestration-v2/ProjectionStore.ts";
-import { migrationManifest, runMigrations } from "../src/persistence/Migrations.ts";
+import {
+  migrationManifest,
+  RECORDED_MIGRATION_NAME_ALIASES,
+  runMigrations,
+} from "../src/persistence/Migrations.ts";
 import * as NodeSqliteClient from "@codeitlab/shared/nodeSqliteClient";
 
 export class MigrateDevDbNotInWorktreeError extends Schema.TaggedError<MigrateDevDbNotInWorktreeError>()(
@@ -402,7 +406,14 @@ const verifyMigrationSlots = Effect.fn("verifyMigrationSlots")(function* () {
   const appliedById = new Map(applied.map((row) => [Number(row.migration_id), row.name]));
   for (const [slot, codeName] of migrationManifest) {
     const appliedName = appliedById.get(slot);
-    if (appliedName !== undefined && appliedName !== codeName) {
+    // A database written before a migration was renamed records the old
+    // spelling. The migrator only looks at ids, so that database is fine and
+    // refusing it here would block the tool on data it can read perfectly well.
+    if (
+      appliedName !== undefined &&
+      appliedName !== codeName &&
+      RECORDED_MIGRATION_NAME_ALIASES.get(appliedName) !== codeName
+    ) {
       return yield* new MigrateDevDbSlotCollisionError({ slot, codeName, appliedName });
     }
   }
