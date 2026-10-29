@@ -29,6 +29,7 @@ import {
   CodeItLabCard,
   CodeItLabEmptyBlock,
   CodeItLabLoadingRows,
+  CodeItLabSectionHeading,
   CodeItLabSourceNote,
 } from "./CodeItLabPrimitives";
 import { IntegrationMark } from "./IntegrationMarks";
@@ -184,60 +185,52 @@ export function CodeItLabIntegrationPage({ id }: { readonly id: CodeItLabIntegra
     <div className="flex flex-col gap-6" data-codeitlab-page={id}>
       <CodeItLabSourceNote source={integrations.source} />
 
-      <div className="flex flex-wrap items-start justify-between gap-4">
-        <div className="flex min-w-0 items-start gap-3">
-          <span className="flex size-14 shrink-0 items-center justify-center rounded-2xl border border-codeitlab-green/25 bg-codeitlab-green/6 text-codeitlab-green">
-            <IntegrationMark id={id} className="size-9" />
-          </span>
-          <div className="min-w-0">
-            <p className="codeitlab-mono-label text-codeitlab-green/80">
-              {INTEGRATION_SURFACE_LABELS[id]}
-            </p>
-            <h2 className="mt-1 font-display text-xl font-semibold tracking-tight text-foreground">
-              {name}
-            </h2>
-            <p className="mt-1 max-w-2xl text-sm text-muted-foreground">
-              {status?.tagline ??
-                "Whitelabel CodeItLab surface backed by a separate open-source engine."}
-            </p>
-          </div>
-        </div>
-        {status === null ? null : (
-          <div className="flex flex-col items-end gap-2">
-            <div className="flex flex-wrap items-center justify-end gap-2">
-              <span data-integration-state={status.state}>
-                <Badge size="sm" variant={integrationStateVariant(status.state)}>
-                  {integrationStateLabel(status.state)}
-                </Badge>
-              </span>
-              {latency === null ? null : (
-                <span className="font-mono text-2xs text-muted-foreground">{latency}</span>
-              )}
+      <CodeItLabSectionHeading
+        eyebrow={INTEGRATION_SURFACE_LABELS[id]}
+        title={name}
+        titleSize="xl"
+        icon={<IntegrationMark id={id} className="size-9" />}
+        description={
+          status?.tagline ?? "Whitelabel CodeItLab surface backed by a separate open-source engine."
+        }
+        action={
+          status === null ? undefined : (
+            <div className="flex flex-col items-end gap-2">
+              <div className="flex flex-wrap items-center justify-end gap-2">
+                <span data-integration-state={status.state}>
+                  <Badge size="sm" variant={integrationStateVariant(status.state)}>
+                    {integrationStateLabel(status.state)}
+                  </Badge>
+                </span>
+                {latency === null ? null : (
+                  <span className="font-mono text-2xs text-muted-foreground">{latency}</span>
+                )}
+              </div>
+              <div className="flex flex-col items-end gap-1">
+                <label className="flex items-center gap-2 text-xs text-muted-foreground">
+                  {status.enabled ? "Enabled" : "Disabled"}
+                  <Switch
+                    aria-describedby="integration-switch-state"
+                    aria-label={`Enable ${status.name}`}
+                    checked={status.enabled}
+                    disabled={busy}
+                    onCheckedChange={(checked) => void update({ enabled: checked })}
+                  />
+                </label>
+                <span
+                  aria-live="polite"
+                  className="text-2xs text-muted-foreground"
+                  id="integration-switch-state"
+                >
+                  {busy
+                    ? "Saving the switch…"
+                    : `${status.name} is ${status.enabled ? "on" : "off"} for this environment.`}
+                </span>
+              </div>
             </div>
-            <div className="flex flex-col items-end gap-1">
-              <label className="flex items-center gap-2 text-xs text-muted-foreground">
-                {status.enabled ? "Enabled" : "Disabled"}
-                <Switch
-                  aria-describedby="integration-switch-state"
-                  aria-label={`Enable ${status.name}`}
-                  checked={status.enabled}
-                  disabled={busy}
-                  onCheckedChange={(checked) => void update({ enabled: checked })}
-                />
-              </label>
-              <span
-                aria-live="polite"
-                className="text-2xs text-muted-foreground"
-                id="integration-switch-state"
-              >
-                {busy
-                  ? "Saving the switch…"
-                  : `${status.name} is ${status.enabled ? "on" : "off"} for this environment.`}
-              </span>
-            </div>
-          </div>
-        )}
-      </div>
+          )
+        }
+      />
 
       {integrations.error === null ? null : (
         <Alert variant="error" data-integration-error>

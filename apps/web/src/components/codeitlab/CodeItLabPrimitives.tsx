@@ -13,22 +13,40 @@ export function CodeItLabSectionHeading({
   title,
   description,
   action,
+  icon,
+  titleSize = "lg",
 }: {
   readonly eyebrow: string;
   readonly title: string;
   readonly description?: string;
   readonly action?: ReactNode;
+  /** A product mark shown before the title, for sections that name what they are about. */
+  readonly icon?: ReactNode;
+  /** Section pages use the default; a page that names a whole product reads at "xl". */
+  readonly titleSize?: "lg" | "xl";
 }) {
   return (
     <div className="flex flex-wrap items-start justify-between gap-3">
-      <div className="min-w-0">
-        <p className="codeitlab-mono-label text-codeitlab-green/80">{eyebrow}</p>
-        <h2 className="mt-1 font-display text-lg font-semibold tracking-tight text-foreground">
-          {title}
-        </h2>
-        {description === undefined ? null : (
-          <p className="mt-1 max-w-2xl text-sm text-muted-foreground">{description}</p>
+      <div className="flex min-w-0 items-start gap-3">
+        {icon === undefined ? null : (
+          <span className="flex size-14 shrink-0 items-center justify-center rounded-2xl border border-codeitlab-green/25 bg-codeitlab-green/6 text-codeitlab-green">
+            {icon}
+          </span>
         )}
+        <div className="min-w-0">
+          <p className="codeitlab-mono-label text-codeitlab-green/80">{eyebrow}</p>
+          <h2
+            className={cn(
+              "mt-1 font-display font-semibold tracking-tight text-foreground",
+              titleSize === "xl" ? "text-xl" : "text-lg",
+            )}
+          >
+            {title}
+          </h2>
+          {description === undefined ? null : (
+            <p className="mt-1 max-w-2xl text-sm text-muted-foreground">{description}</p>
+          )}
+        </div>
       </div>
       {action === undefined ? null : (
         <div className="flex shrink-0 items-center gap-2">{action}</div>
