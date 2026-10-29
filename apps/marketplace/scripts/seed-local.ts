@@ -15,9 +15,43 @@ const now = new Date("2026-10-29T00:00:00.000Z");
 const iso = (offsetDays: number) => new Date(now.getTime() - offsetDays * 86_400_000).toISOString();
 
 const existing = db.prepare("SELECT COUNT(*) AS n FROM coder_profiles").get() as { n: number };
-if (existing.n > 0 && !force) {
-  console.log("[seed] already has " + existing.n + " coder profiles; pass --force to add anyway");
-  process.exit(0);
+if (existing.n > 0) {
+  if (!force) {
+    console.log("[seed] already has " + existing.n + " coder profiles; pass --force to replace it");
+    process.exit(0);
+  }
+  // --force replaces rather than appends: the ids below are fixed, so a second
+  // pass would otherwise trip the unique constraint on accounts.email halfway
+  // through and leave the database half-seeded. Children go before parents
+  // because foreign keys are enforced. schema_migrations is left alone.
+  db.exec(`
+    DELETE FROM engagement_messages;
+    DELETE FROM ledger_entries;
+    DELETE FROM payment_events;
+    DELETE FROM ratings;
+    DELETE FROM reports;
+    DELETE FROM job_invites;
+    DELETE FROM notifications;
+    DELETE FROM notification_outbox;
+    DELETE FROM email_outbox;
+    DELETE FROM push_subscriptions;
+    DELETE FROM push_outbox;
+    DELETE FROM assisted_scopes;
+    DELETE FROM assisted_shortlist;
+    DELETE FROM saved_searches;
+    DELETE FROM coder_alerts;
+    DELETE FROM rate_events;
+    DELETE FROM admin_audit;
+    DELETE FROM api_tokens;
+    DELETE FROM sessions;
+    DELETE FROM auth_codes;
+    DELETE FROM engagements;
+    DELETE FROM interests;
+    DELETE FROM jobs;
+    DELETE FROM coder_profiles;
+    DELETE FROM business_profiles;
+    DELETE FROM accounts;
+  `);
 }
 
 const insertAccount = db.prepare(
