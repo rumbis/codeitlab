@@ -314,3 +314,111 @@ export function CodeItLabMeter({ value }: { readonly value: number }) {
     </div>
   );
 }
+
+/**
+ * The four ways a status can read, in the vocabulary people already know from
+ * every other interface: green means it works, amber means it needs a look, red
+ * means it is broken. Screens map their own states onto these instead of
+ * inventing a colour, so the same word never means two things across the app.
+ */
+export type CodeItLabStatusTone = "success" | "warning" | "error" | "neutral";
+
+const STATUS_BADGE_VARIANT: Record<CodeItLabStatusTone, ComponentProps<typeof Badge>["variant"]> = {
+  success: "success",
+  warning: "warning",
+  error: "error",
+  neutral: "secondary",
+};
+
+/** One tone-to-badge mapping, so a screen only decides the tone and not the paint. */
+export function CodeItLabStatusBadge({
+  tone,
+  children,
+  ...props
+}: {
+  readonly tone: CodeItLabStatusTone;
+} & Omit<ComponentProps<typeof Badge>, "variant">) {
+  return (
+    <Badge size="sm" variant={STATUS_BADGE_VARIANT[tone]} {...props}>
+      {children}
+    </Badge>
+  );
+}
+
+/**
+ * Where one step of a sequence stands. The three states borrow the signal people
+ * already read without thinking: a tick in success green for a step that is
+ * settled, a filled ring for the one they are on now, and a hollow grey ring for
+ * what is still ahead. Same shape and same size in all three, so the sequence
+ * stays readable as one thing rather than three badges.
+ */
+export type CodeItLabStepState = "done" | "current" | "upcoming";
+
+const STEP_MARKER_CLASS: Record<CodeItLabStepState, string> = {
+  done: "border-success/50 bg-success/10 text-success",
+  current: "border-codeitlab-green bg-codeitlab-green/15 text-codeitlab-green",
+  upcoming: "border-border text-muted-foreground",
+};
+
+export function CodeItLabStepMarker({
+  state,
+  index,
+}: {
+  readonly state: CodeItLabStepState;
+  readonly index: number;
+}) {
+  return (
+    <span
+      aria-hidden
+      className={cn(
+        "flex size-5 shrink-0 items-center justify-center rounded-full border text-2xs",
+        STEP_MARKER_CLASS[state],
+      )}
+    >
+      {state === "done" ? "✓" : index + 1}
+    </span>
+  );
+}
+
+/** The step list every guided screen shares, so "where am I" reads the same everywhere. */
+export function CodeItLabSteps({
+  steps,
+}: {
+  readonly steps: ReadonlyArray<{
+    readonly id: string;
+    readonly label: string;
+    readonly done: boolean;
+  }>;
+}) {
+  // The first unfinished step is the one the screen is asking for; everything
+  // after it is still ahead. Without this the list would show two kinds of grey.
+  const currentIndex = steps.findIndex((step) => !step.done);
+  return (
+    <ol className="flex flex-col gap-2">
+      {steps.map((step, index) => {
+        const state: CodeItLabStepState = step.done
+          ? "done"
+          : index === currentIndex
+            ? "current"
+            : "upcoming";
+        return (
+          <li
+            className="flex items-center gap-3 rounded-lg border border-border/60 bg-background/40 p-3"
+            key={step.id}
+          >
+            <CodeItLabStepMarker index={index} state={state} />
+            <span
+              className={
+                step.done
+                  ? "min-w-0 text-sm text-muted-foreground line-through"
+                  : "min-w-0 text-sm text-foreground"
+              }
+            >
+              {step.label}
+            </span>
+          </li>
+        );
+      })}
+    </ol>
+  );
+}

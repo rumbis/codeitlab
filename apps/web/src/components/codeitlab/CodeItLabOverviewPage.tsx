@@ -48,6 +48,7 @@ import {
   CodeItLabCard,
   CodeItLabPrimaryCard,
   CodeItLabSectionHeading,
+  CodeItLabSteps,
   CodeItLabSourceNote,
   CodeItLabStat,
 } from "./CodeItLabPrimitives";
@@ -274,30 +275,7 @@ export function CodeItLabOverviewPage() {
               {workSteps.filter((step) => step.done).length}/{workSteps.length} steps
             </Badge>
           </div>
-          <ol className="flex flex-col gap-2">
-            {workSteps.map((step, index) => (
-              <li
-                className="flex items-center gap-3 rounded-lg border border-border/60 bg-background/40 p-3"
-                key={step.id}
-              >
-                <span
-                  aria-hidden
-                  className="flex size-5 shrink-0 items-center justify-center rounded-full border border-border text-2xs text-muted-foreground"
-                >
-                  {step.done ? "✓" : index + 1}
-                </span>
-                <span
-                  className={
-                    step.done
-                      ? "min-w-0 text-sm text-muted-foreground line-through"
-                      : "min-w-0 text-sm text-foreground"
-                  }
-                >
-                  {step.label}
-                </span>
-              </li>
-            ))}
-          </ol>
+          <CodeItLabSteps steps={workSteps} />
           <div className="flex flex-wrap items-center gap-2">
             <Button render={<Link to="/settings/codeitlab/profile" />} size="sm">
               {profileDone ? "Review your profile" : "Build your profile"}

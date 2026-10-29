@@ -21,6 +21,7 @@ import {
   CodeItLabEmptyBlock,
   CodeItLabPrimaryCard,
   CodeItLabSectionHeading,
+  CodeItLabStepMarker,
 } from "./CodeItLabPrimitives";
 
 /** The comma-separated fields a person typed, as the list the marketplace stores. */
@@ -41,6 +42,8 @@ export function CodeItLabProfilePage() {
   const { codeitlab, update } = useCodeItLabSettingsWriter();
   const profile = codeitlab.profile;
   const steps = profileSteps(profile);
+  // The first thing still missing is what this screen is asking for.
+  const currentStep = steps.findIndex((step) => !step.done);
   const work = profileWorkHistory(profile);
   const summary = profilePublicSummary(profile);
   const publish = useCodeItLabProfilePublish(null);
@@ -163,12 +166,10 @@ export function CodeItLabProfilePage() {
         <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
           {steps.map((step, index) => (
             <span className="flex items-center gap-2 text-xs text-muted-foreground" key={step.id}>
-              <span
-                aria-hidden
-                className="flex size-4 items-center justify-center rounded-full border border-border text-2xs"
-              >
-                {step.done ? "✓" : index + 1}
-              </span>
+              <CodeItLabStepMarker
+                index={index}
+                state={step.done ? "done" : index === currentStep ? "current" : "upcoming"}
+              />
               <span className={step.done ? "text-foreground" : undefined}>{step.label}</span>
             </span>
           ))}

@@ -88,7 +88,10 @@ export function CodeItLabNexusPage() {
                   {provider.driverKind} · {provider.instanceId}
                 </p>
               </div>
-              <Badge size="sm" variant={provider.available ? "success" : "error"}>
+              {/* An offline provider is a caution, not a failure: nothing it owns
+                  is broken, it just cannot serve right now. Red is reserved for
+                  states that need fixing, so it stays meaningful when it appears. */}
+              <Badge size="sm" variant={provider.available ? "success" : "warning"}>
                 {provider.available ? "online" : "offline"}
               </Badge>
             </div>
