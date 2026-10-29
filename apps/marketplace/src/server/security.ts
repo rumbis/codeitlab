@@ -48,6 +48,24 @@ function expectedOrigin(ctx: AppContext): string {
 }
 
 /**
+ * The local website runs on its own origin, so a browser fetch from it is
+ * cross-origin and needs an explicit allowlist — the public marketplace is
+ * same-origin behind the site proxy and never needs one. With no list
+ * configured this sends nothing, so a deployed marketplace behaves exactly as
+ * before. The list is checked rather than reflected blindly because the
+ * responses carry session cookies.
+ */
+export function corsHeaders(ctx: AppContext, request: Request): Record<string, string> {
+  const origin = request.headers.get("origin");
+  if (origin === null || origin === "" || !ctx.trustedOrigins.includes(origin)) return {};
+  return {
+    "access-control-allow-origin": origin,
+    "access-control-allow-credentials": "true",
+    vary: "origin",
+  };
+}
+
+/**
  * CSRF defence for state-changing requests. A browser always sends `Origin` on
  * a cross-site form post; if it disagrees with our public origin the request is
  * rejected before it reaches a handler. `Referer` covers the older browsers
@@ -59,8 +77,11 @@ export function assertSameOrigin(ctx: AppContext, request: Request): void {
   if (method === "GET" || method === "HEAD" || method === "OPTIONS") return;
 
   const expected = expectedOrigin(ctx);
-
   const origin = request.headers.get("origin");
+  // A trusted cross-origin caller (the local website) posts with its own Origin,
+  // which the allowlist accepted above; only the allowlist may widen this check.
+  if (origin !== null && origin !== "" && ctx.trustedOrigins.includes(origin)) return;
+
   if (origin !== null && origin !== "") {
     if (origin !== expected) {
       throw forbidden("Cross-origin request rejected.", "cross_origin");

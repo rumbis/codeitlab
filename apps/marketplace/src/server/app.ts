@@ -133,7 +133,7 @@ import { toCsv } from "./csv.ts";
 import { reconcileLedger } from "./reconcile.ts";
 import { parseWebhookEvent, recordWebhookEvent, verifyWebhookSignature } from "./webhook.ts";
 import { questsFor } from "./quests.ts";
-import { adminCookieHeader, assertSameOrigin, securityHeaders } from "./security.ts";
+import { adminCookieHeader, assertSameOrigin, corsHeaders, securityHeaders } from "./security.ts";
 import {
   approveCoder,
   findCoderRowById,
@@ -158,6 +158,8 @@ export interface CreateAppOptions {
   readonly basePath?: string;
   readonly baseUrl?: string;
   readonly adminToken?: string;
+  /** Browser origins allowed to call this service cross-origin (see AppContext). */
+  readonly trustedOrigins?: readonly string[];
   readonly trustProxy?: boolean;
   readonly notifyWebhook?: string;
   readonly notifySecret?: string;
@@ -376,6 +378,9 @@ export function createApp(options: CreateAppOptions): AppHandler {
       "https://codeitlab.com/market"
     ).replace(/\/+$/u, ""),
     adminToken: options.adminToken ?? process.env.MARKETPLACE_ADMIN_TOKEN ?? "",
+    trustedOrigins: (options.trustedOrigins ?? trustedOriginsFromEnv()).map((value) =>
+      value.replace(/\/+$/u, ""),
+    ),
     trustProxy: options.trustProxy ?? process.env.MARKETPLACE_TRUST_PROXY === "1",
     notifyWebhook: options.notifyWebhook ?? process.env.MARKETPLACE_NOTIFY_WEBHOOK ?? "",
     notifySecret: options.notifySecret ?? process.env.MARKETPLACE_NOTIFY_SECRET ?? "",
@@ -1664,10 +1669,13 @@ export function createApp(options: CreateAppOptions): AppHandler {
   }
 
   /** Every response leaves through here, so no handler can forget the headers. */
-  function withSecurityHeaders(response: Response): Response {
+  function withSecurityHeaders(response: Response, request: Request): Response {
     const headers = new Headers(response.headers);
     for (const [key, value] of Object.entries(securityHeaders(ctx))) {
       if (!headers.has(key)) headers.set(key, value);
+    }
+    for (const [key, value] of Object.entries(corsHeaders(ctx, request))) {
+      headers.set(key, value);
     }
     return new Response(response.body, {
       status: response.status,
@@ -1684,10 +1692,32 @@ export function createApp(options: CreateAppOptions): AppHandler {
     try {
       // Reject a cross-site form post before it can touch a handler.
       assertSameOrigin(ctx, request);
+      // A cross-origin preflight carries no credentials and no path handler owns
+      // it, so answer it here with the allowlist headers the real request needs.
+      if (method === "OPTIONS") {
+        const preflight = corsHeaders(ctx, request);
+        if (Object.keys(preflight).length > 0) {
+          return withSecurityHeaders(
+            new Response(null, {
+              status: 204,
+              headers: {
+                ...preflight,
+                "access-control-allow-methods": "GET, POST, PUT, PATCH, DELETE, OPTIONS",
+                "access-control-allow-headers": "content-type, authorization",
+                "access-control-max-age": "600",
+              },
+            }),
+            request,
+          );
+        }
+      }
       session = requestSession(ctx, request, path);
-      return withSecurityHeaders(await dispatch({ ctx, url, path, method, session, request }));
+      return withSecurityHeaders(
+        await dispatch({ ctx, url, path, method, session, request }),
+        request,
+      );
     } catch (error) {
-      return withSecurityHeaders(errorResponse(request, path, session, error));
+      return withSecurityHeaders(errorResponse(request, path, session, error), request);
     }
   };
 
@@ -1712,6 +1742,14 @@ export function createApp(options: CreateAppOptions): AppHandler {
       db.close();
     },
   });
+}
+
+/** Comma-separated list, so a self-hoster can allow one local website origin. */
+function trustedOriginsFromEnv(): readonly string[] {
+  return (process.env.MARKETPLACE_TRUSTED_ORIGINS ?? "")
+    .split(",")
+    .map((value) => value.trim())
+    .filter((value) => value !== "");
 }
 
 function httpTitle(status: number): string {

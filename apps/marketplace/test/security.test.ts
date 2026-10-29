@@ -157,3 +157,63 @@ describe("rate-limit identity", () => {
     expect(otherAddress.status).toBe(200);
   });
 });
+
+describe("cross-origin access for the local website", () => {
+  const LOCAL_ORIGIN = "http://127.0.0.1:4173";
+
+  it("sends no CORS headers when no origin is allowlisted", async () => {
+    const app = newApp();
+    const response = await app.request("/api/health", { headers: { origin: LOCAL_ORIGIN } });
+    expect(response.status).toBe(200);
+    expect(response.headers.get("access-control-allow-origin")).toBeNull();
+  });
+
+  it("answers an allowlisted origin and varies on it", async () => {
+    const app = createTestApp({ baseUrl: TEST_ORIGIN, trustedOrigins: [LOCAL_ORIGIN] });
+    apps.push(app);
+    const response = await app.request("/api/health", { headers: { origin: LOCAL_ORIGIN } });
+    expect(response.headers.get("access-control-allow-origin")).toBe(LOCAL_ORIGIN);
+    expect(response.headers.get("access-control-allow-credentials")).toBe("true");
+    expect(response.headers.get("vary")?.toLowerCase()).toContain("origin");
+  });
+
+  it("never reflects an origin that is not allowlisted", async () => {
+    const app = createTestApp({ baseUrl: TEST_ORIGIN, trustedOrigins: [LOCAL_ORIGIN] });
+    apps.push(app);
+    const response = await app.request("/api/health", {
+      headers: { origin: "http://evil.test" },
+    });
+    expect(response.headers.get("access-control-allow-origin")).toBeNull();
+  });
+
+  it("lets an allowlisted origin post past the same-origin guard", async () => {
+    const app = createTestApp({ baseUrl: TEST_ORIGIN, trustedOrigins: [LOCAL_ORIGIN] });
+    apps.push(app);
+    const allowed = await app.request("/api/auth/request-code", {
+      method: "POST",
+      headers: { origin: LOCAL_ORIGIN },
+      body: { email: "local@example.com", role: "coder" },
+    });
+    expect(allowed.status).toBe(200);
+
+    const blocked = await app.request("/api/auth/request-code", {
+      method: "POST",
+      headers: { origin: "http://evil.test" },
+      body: { email: "local@example.com", role: "coder" },
+    });
+    expect(blocked.status).toBe(403);
+  });
+
+  it("answers the browser preflight without reaching a handler", async () => {
+    const app = createTestApp({ baseUrl: TEST_ORIGIN, trustedOrigins: [LOCAL_ORIGIN] });
+    apps.push(app);
+    const response = await app.request("/api/auth/request-code", {
+      method: "OPTIONS",
+      headers: { origin: LOCAL_ORIGIN },
+    });
+    expect(response.status).toBe(204);
+    expect(response.headers.get("access-control-allow-origin")).toBe(LOCAL_ORIGIN);
+    expect(response.headers.get("access-control-allow-methods")).toContain("POST");
+    expect(response.headers.get("access-control-allow-headers")).toContain("content-type");
+  });
+});

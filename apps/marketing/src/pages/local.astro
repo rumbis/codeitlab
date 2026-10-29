@@ -1,0 +1,440 @@
+---
+import Layout from "../layouts/Layout.astro";
+
+// This page is the local counterpart to the public site: it runs on one machine,
+// talks to the marketplace server started beside it, and exists so the download
+// path and the vibe-coder directory can be exercised without a deploy. The
+// marketplace origin is configurable because the port is not fixed.
+const localMarketplaceUrl = import.meta.env.LOCAL_MARKETPLACE_URL ?? "http://127.0.0.1:4180/market";
+---
+
+<Layout
+  title="CodeItLab local"
+  description="The local CodeItLab site: download the app, find a vibe-coder studio, and talk to the marketplace running on your machine."
+>
+  <main class="local">
+    <header class="local-head">
+      <p class="local-kicker">Running on this machine</p>
+      <h1 class="display">Download the app. Find a studio. Talk to it.</h1>
+      <p class="local-sub">
+        Everything below talks to the marketplace server on
+        <code>{localMarketplaceUrl}</code>. Start it with
+        <code>node apps/marketplace/src/server/main.ts</code>, then use this page.
+      </p>
+      <div class="local-actions">
+        <a class="btn btn-primary btn-lg" href="/download">Download CodeItLab</a>
+        <a class="btn btn-ghost btn-lg" href="/market">How the marketplace works</a>
+      </div>
+    </header>
+
+    <section class="local-sec" id="studios">
+      <h2>Vibe-coder studios</h2>
+      <p class="local-note" id="studios-note">Loading studios…</p>
+      <ul class="local-grid" id="studios-list"></ul>
+    </section>
+
+    <section class="local-sec" id="jobs">
+      <h2>Open work</h2>
+      <p class="local-note" id="jobs-note">Loading jobs…</p>
+      <ul class="local-grid" id="jobs-list"></ul>
+    </section>
+
+    <section class="local-sec" id="talk">
+      <h2>Talk to the marketplace</h2>
+      <p class="local-note">
+        A live round trip: this signs in against the marketplace API, opens the
+        thread and renders exactly what it answers.
+      </p>
+      <div class="local-actions">
+        <button class="btn btn-primary" id="ping" type="button">Ping the marketplace</button>
+      </div>
+      <form class="local-signin" id="signin">
+        <label class="local-field">
+          <span>Email</span>
+          <input id="signin-email" type="email" value="business001@example.test" required />
+        </label>
+        <label class="local-field">
+          <span>Role</span>
+          <select id="signin-role">
+            <option value="business">business</option>
+            <option value="coder">coder</option>
+          </select>
+        </label>
+        <button class="btn btn-ghost" type="submit">Sign in</button>
+      </form>
+      <p class="local-note" id="signin-note">
+        The marketplace prints the login code to its own terminal; paste it here.
+      </p>
+      <form class="local-signin" id="verify">
+        <label class="local-field">
+          <span>Code</span>
+          <input id="verify-code" type="text" inputmode="numeric" placeholder="123456" required />
+        </label>
+        <button class="btn btn-ghost" type="submit">Verify</button>
+      </form>
+      <div class="local-actions">
+        <button class="btn btn-ghost" id="load-thread" type="button">Load the thread</button>
+      </div>
+      <form class="local-signin" id="compose">
+        <label class="local-field local-field-wide">
+          <span>Message</span>
+          <input id="message-body" type="text" placeholder="Γεια σου! Πότε ξεκινάμε;" required />
+        </label>
+        <button class="btn btn-primary" type="submit">Send</button>
+      </form>
+      <ul class="local-grid" id="messages"></ul>
+      <pre class="local-console" id="console">Waiting for a request…</pre>
+    </section>
+  </main>
+</Layout>
+
+<script is:inline define:vars={{ marketplaceUrl: localMarketplaceUrl }}>
+  const $ = (id) => document.getElementById(id);
+  const consoleNode = $("console");
+
+  function log(line) {
+    if (!consoleNode) return;
+    consoleNode.textContent += "\n" + line;
+  }
+
+  function card(title, sub, body, href) {
+    const item = document.createElement("li");
+    item.className = "local-card";
+    const h = document.createElement("h3");
+    if (href) {
+      const a = document.createElement("a");
+      a.href = marketplaceUrl + href;
+      a.target = "_blank";
+      a.rel = "noopener noreferrer";
+      a.textContent = title;
+      h.append(a);
+    } else {
+      h.textContent = title;
+    }
+    const p = document.createElement("p");
+    p.className = "local-card-sub";
+    p.textContent = sub;
+    const b = document.createElement("p");
+    b.className = "local-card-body";
+    b.textContent = body;
+    item.append(h, p, b);
+    return item;
+  }
+
+  const clean = (value) => (value || "").replace(/\s+/g, " ").trim();
+  const pick = (root, selector) => clean(root.querySelector(selector)?.textContent);
+
+  /**
+   * The marketplace renders the directory server-side, so this reads the cards
+   * it already produced instead of asking for a JSON endpoint that does not
+   * exist for anonymous visitors.
+   */
+  function parseStudios(html) {
+    const doc = new DOMParser().parseFromString(html, "text/html");
+    return [...doc.querySelectorAll("article.coder-card")]
+      .map((article) => {
+        const anchor = article.querySelector('a[href*="/coders/"]');
+        return {
+          url: anchor?.getAttribute("href") || "",
+          name: pick(article, "h3"),
+          headline: pick(article, ".headline"),
+          rate: pick(article, ".rate"),
+          meta: pick(article, ".meta"),
+          bio: pick(article, ".clamp"),
+        };
+      })
+      .filter((item) => item.name !== "" && item.url !== "");
+  }
+
+  function parseJobs(html) {
+    const doc = new DOMParser().parseFromString(html, "text/html");
+    return [...doc.querySelectorAll("article")]
+      .map((article) => {
+        const anchor = article.querySelector('a[href*="/jobs/"]');
+        return {
+          url: anchor?.getAttribute("href") || "",
+          title: pick(article, "h3") || clean(anchor?.textContent),
+          meta: pick(article, ".meta"),
+          body: pick(article, ".clamp") || pick(article, ".lead"),
+        };
+      })
+      .filter((item) => item.title !== "");
+  }
+
+  async function fetchText(path) {
+    const started = performance.now();
+    const response = await fetch(marketplaceUrl + path, { headers: { accept: "text/html" } });
+    const ms = Math.round(performance.now() - started);
+    log("GET " + path + " -> " + response.status + " in " + ms + "ms");
+    return { response, html: await response.text() };
+  }
+
+  async function loadStudios() {
+    const note = $("studios-note");
+    const list = $("studios-list");
+    try {
+      const { response, html } = await fetchText("/coders");
+      if (!response.ok) { if (note) note.textContent = "Marketplace answered " + response.status; return; }
+      const studios = parseStudios(html);
+      if (note) note.textContent = studios.length + " approved studios, read live from the marketplace";
+      if (!list) return;
+      list.replaceChildren();
+      for (const studio of studios) {
+        list.append(
+          card(studio.name, [studio.rate, studio.meta].filter(Boolean).join(" \u00b7 "), studio.headline || studio.bio, studio.url),
+        );
+      }
+    } catch (error) {
+      if (note) note.textContent = "Cannot reach the marketplace at " + marketplaceUrl + " — is it running?";
+      log("studios failed: " + String(error));
+    }
+  }
+
+  async function loadJobs() {
+    const note = $("jobs-note");
+    const list = $("jobs-list");
+    try {
+      const { response, html } = await fetchText("/jobs");
+      if (!response.ok) { if (note) note.textContent = "Marketplace answered " + response.status; return; }
+      const jobs = parseJobs(html);
+      if (note) note.textContent = jobs.length + " open jobs, read live from the marketplace";
+      if (!list) return;
+      list.replaceChildren();
+      for (const job of jobs) list.append(card(job.title, job.meta, job.body, job.url));
+    } catch (error) {
+      if (note) note.textContent = "Cannot reach the marketplace at " + marketplaceUrl + " — is it running?";
+      log("jobs failed: " + String(error));
+    }
+  }
+
+  // The round trip that proves the wiring: a real request, a real answer,
+  // rendered as the service sent it.
+  $("ping")?.addEventListener("click", async () => {
+    const started = performance.now();
+    try {
+      const response = await fetch(marketplaceUrl + "/api/health", { headers: { accept: "application/json" } });
+      const ms = Math.round(performance.now() - started);
+      log("GET /api/health -> " + response.status + " in " + ms + "ms");
+      log(await response.text());
+    } catch (error) {
+      log("GET /api/health failed: " + String(error));
+    }
+  });
+
+  // The same allowlist the marketplace checks, so every call below is a
+  // genuine cross-origin request rather than a same-site one.
+  let signedIn = false;
+  let engagementId = null;
+
+  async function api(path, init) {
+    const started = performance.now();
+    const response = await fetch(marketplaceUrl + path, {
+      credentials: "include",
+      headers: { "content-type": "application/json" },
+      ...init,
+    });
+    const ms = Math.round(performance.now() - started);
+    const text = await response.text();
+    log((init?.method || "GET") + " " + path + " -> " + response.status + " in " + ms + "ms");
+    let json = null;
+    try { json = JSON.parse(text); } catch { log(text.slice(0, 200)); }
+    if (!response.ok) throw new Error(json?.message || "HTTP " + response.status);
+    return json;
+  }
+
+  $("signin")?.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const note = $("signin-note");
+    try {
+      const email = $("signin-email").value.trim();
+      const role = $("signin-role").value;
+      await api("/api/auth/request-code", { method: "POST", body: JSON.stringify({ email, role }) });
+      if (note) note.textContent = "Code sent. Read it from the marketplace terminal and paste it below.";
+    } catch (error) {
+      if (note) note.textContent = "Sign in failed: " + String(error.message || error);
+    }
+  });
+
+  $("verify")?.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const note = $("signin-note");
+    try {
+      const email = $("signin-email").value.trim();
+      const code = $("verify-code").value.trim();
+      const result = await api("/api/auth/verify", { method: "POST", body: JSON.stringify({ email, code }) });
+      signedIn = true;
+      if (note) note.textContent = "Signed in as " + result.account.email + " (" + result.account.role + ").";
+    } catch (error) {
+      if (note) note.textContent = "Verify failed: " + String(error.message || error);
+    }
+  });
+
+  $("load-thread")?.addEventListener("click", async () => {
+    const list = $("messages");
+    try {
+      if (!signedIn) throw new Error("sign in first");
+      const list2 = await api("/api/engagements");
+      if (!list2.engagements || list2.engagements.length === 0) {
+        log("no engagements for this account");
+        return;
+      }
+      engagementId = list2.engagements[0].engagement.id;
+      const thread = await api("/api/engagements/" + engagementId + "/messages");
+      if (list) {
+        list.replaceChildren();
+        for (const message of thread.messages) {
+          list.append(card(message.authorRole || "?", "", message.body, ""));
+        }
+      }
+      log("thread " + engagementId + " has " + thread.count + " messages");
+    } catch (error) {
+      log("thread failed: " + String(error.message || error));
+    }
+  });
+
+  $("compose")?.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    try {
+      if (!signedIn) throw new Error("sign in first");
+      if (!engagementId) throw new Error("load the thread first");
+      const body = $("message-body").value.trim();
+      const sent = await api("/api/engagements/" + engagementId + "/messages", {
+        method: "POST",
+        body: JSON.stringify({ body }),
+      });
+      log("sent: " + sent.message.body);
+      $("message-body").value = "";
+      $("load-thread").click();
+    } catch (error) {
+      log("send failed: " + String(error.message || error));
+    }
+  });
+
+  void loadStudios();
+  void loadJobs();
+</script>
+
+<style>
+  .local {
+    max-width: 1000px;
+    margin: 0 auto;
+    padding: 96px 24px 120px;
+  }
+  .local-head { margin-bottom: 72px; }
+  .local-kicker {
+    font-family: var(--font-mono);
+    font-size: 12px;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--accent);
+    margin-bottom: 20px;
+  }
+  .local-head h1 {
+    font-size: clamp(34px, 5vw, 56px);
+    line-height: 1.05;
+    letter-spacing: -0.03em;
+    margin-bottom: 20px;
+  }
+  .local-sub {
+    color: var(--fg-muted);
+    font-size: 17px;
+    max-width: 62ch;
+  }
+  .local-sub code {
+    font-family: var(--font-mono);
+    font-size: 0.9em;
+    color: var(--fg);
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 1px 6px;
+  }
+  .local-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px;
+    margin-top: 28px;
+  }
+  .local-sec { margin-bottom: 72px; }
+  .local-sec h2 {
+    font-size: 26px;
+    letter-spacing: -0.02em;
+    margin-bottom: 8px;
+  }
+  .local-note {
+    color: var(--fg-dim);
+    font-size: 14px;
+    margin-bottom: 24px;
+  }
+  .local-grid {
+    list-style: none;
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+    gap: 14px;
+  }
+  .local-card {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 18px 20px;
+  }
+  .local-card h3 {
+    font-size: 15px;
+    font-weight: 600;
+    margin-bottom: 6px;
+  }
+  .local-card-sub { color: var(--fg-muted); font-size: 13px; }
+  .local-card-body { color: var(--fg-dim); font-size: 13px; margin-top: 8px; }
+  .local-card-body:empty { display: none; }
+  .local-signin {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-end;
+    gap: 12px;
+    margin-bottom: 16px;
+  }
+  .local-field {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    font-size: 12px;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--fg-dim);
+  }
+  .local-field-wide { flex: 1 1 320px; }
+  .local-field input,
+  .local-field select {
+    font-family: var(--font-mono);
+    font-size: 13px;
+    color: var(--fg);
+    background: var(--bg-elev);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 8px 10px;
+    text-transform: none;
+    letter-spacing: normal;
+  }
+  .local-field input:focus-visible,
+  .local-field select:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 1px;
+  }
+  .local-console {
+    font-family: var(--font-mono);
+    font-size: 12.5px;
+    line-height: 1.6;
+    color: var(--fg-muted);
+    background: var(--bg-elev);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 18px 20px;
+    margin-top: 20px;
+    white-space: pre-wrap;
+    overflow-x: auto;
+    min-height: 96px;
+  }
+  @media (max-width: 640px) {
+    .local { padding: 64px 18px 96px; }
+  }
+</style>

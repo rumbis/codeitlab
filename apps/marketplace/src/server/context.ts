@@ -18,6 +18,13 @@ export interface AppContext {
   readonly baseUrl: string;
   readonly adminToken: string;
   /**
+   * Extra browser origins allowed to call this service cross-origin, from
+   * MARKETPLACE_TRUSTED_ORIGINS. Empty by default: the deployed marketplace is
+   * reached same-origin through the site proxy, and a local website is the only
+   * caller that legitimately needs to cross origins.
+   */
+  readonly trustedOrigins: readonly string[];
+  /**
    * Trust `x-forwarded-for` / `x-real-ip` from a reverse proxy. Off by default:
    * a client that can set those headers would otherwise pick its own rate-limit
    * bucket. Enable with MARKETPLACE_TRUST_PROXY=1 behind a real proxy.
