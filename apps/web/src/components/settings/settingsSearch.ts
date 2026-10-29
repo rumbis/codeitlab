@@ -1136,7 +1136,10 @@ export const SETTINGS_SEARCH_ITEMS = [
     id: "codeitlab-profile",
     title: "CodeItLab profile",
     to: "/settings/codeitlab/profile",
-    searchTerms: ["profile interest domain skillset declare who i am"],
+    searchTerms: [
+      "profile interest domain skillset declare who i am",
+      "work history experience cv resume publish to businesses",
+    ],
   },
   {
     id: "codeitlab-marketplace",
