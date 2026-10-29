@@ -72,6 +72,18 @@ export type EngagementStatus =
 
 export type LedgerKind = "charge" | "platform_fee" | "payout" | "refund";
 
+/**
+ * One job a person has held. It is the structured form of "what have you done
+ * so far": a business reads the role and the company, not a paragraph.
+ */
+export interface WorkHistoryEntry {
+  readonly company: string;
+  readonly role: string;
+  /** Free text such as "2021 - 2023"; not every job has exact dates. */
+  readonly period: string;
+  readonly summary: string;
+}
+
 export interface CoderProfile {
   readonly id: string;
   readonly accountId: string;
@@ -85,6 +97,8 @@ export interface CoderProfile {
   readonly skillLevels: Readonly<Record<string, number>>;
   /** Public links that prove the work: repos, case studies, deliveries. */
   readonly evidence: readonly string[];
+  /** Jobs in the person's own words, newest first. */
+  readonly workHistory: readonly WorkHistoryEntry[];
   readonly availability: Availability;
   readonly rateMinCents: number;
   readonly rateMaxCents: number;

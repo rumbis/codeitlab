@@ -489,6 +489,16 @@ const MIGRATIONS: readonly { readonly version: number; readonly sql: string }[] 
         ON engagement_messages (engagement_id, created_at);
     `,
   },
+  {
+    // What a person has actually worked on, one row per job. The app's profile
+    // collects it step by step; a business needs it as structure, not as a
+    // paragraph in the bio, so it is stored as a JSON array of entries rather
+    // than folded into prose. Existing profiles start empty.
+    version: 26,
+    sql: `
+      ALTER TABLE coder_profiles ADD COLUMN work_history TEXT NOT NULL DEFAULT '[]';
+    `,
+  },
 ];
 
 export function openDatabase(dbPath: string): Db {

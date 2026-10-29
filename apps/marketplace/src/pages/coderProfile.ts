@@ -8,6 +8,37 @@ import { money, skillChips } from "./components.ts";
 import { escapeHtml } from "./escape.ts";
 import { flashFrom, layout, pageUrl } from "./layout.ts";
 
+/**
+ * The person's own account of what they have done, in their words. It sits
+ * above the derived track record on purpose: a business wants to know what the
+ * work was before it counts the deliveries.
+ */
+function workHistoryList(profile: CoderProfile): string {
+  if (profile.workHistory.length === 0) return "";
+
+  const entries = profile.workHistory
+    .map((entry) => {
+      const title = [entry.role, entry.company === "" ? "" : `at ${entry.company}`]
+        .filter((part) => part !== "")
+        .join(" ");
+      const period =
+        entry.period === "" ? "" : `<span class="meta">${escapeHtml(entry.period)}</span>`;
+      const summary =
+        entry.summary === "" ? "" : `<div class="prose">${escapeHtml(entry.summary)}</div>`;
+      return `<li class="card">
+        <div class="card-head"><h3>${escapeHtml(title === "" ? "Worked on" : title)}</h3>${period}</div>
+        ${summary}
+      </li>`;
+    })
+    .join("");
+
+  return `<section class="card">
+      <h2>What they have worked on</h2>
+      <p class="meta">Written by the person themselves, not derived from this platform.</p>
+      <ul class="plain-list">${entries}</ul>
+    </section>`;
+}
+
 function skillLevelList(profile: CoderProfile): string {
   const entries = Object.entries(profile.skillLevels);
   if (entries.length === 0) return "";
@@ -92,6 +123,7 @@ export function renderCoderProfile(
     ${profile.interests.length === 0 ? "" : `<p class="meta">Wants work in: ${escapeHtml(profile.interests.join(", "))}</p>`}
     <div class="prose">${escapeHtml(profile.bio)}</div>
     ${links === "" ? "" : `<p class="links">${links}</p>`}
+    ${workHistoryList(profile)}
     ${
       evidence === ""
         ? ""

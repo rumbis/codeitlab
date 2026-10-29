@@ -88,6 +88,8 @@ import {
   CodeItLabDeliveryResult,
   CodeItLabEngagementApplyToJobInput,
   CodeItLabEngagementApplyToJobResult,
+  CodeItLabProfilePublishInput,
+  CodeItLabProfilePublishResult,
   CodeItLabEngagementTransitionInput,
   CodeItLabEngagementTransitionResult,
   SandboxHealth,
@@ -725,6 +727,7 @@ export const WS_METHODS = {
   codeitlabEngagementsDeliver: "codeitlab.engagements.deliver",
   codeitlabEngagementsTransition: "codeitlab.engagements.transition",
   codeitlabEngagementsApplyToJob: "codeitlab.engagements.applyToJob",
+  codeitlabProfilePublish: "codeitlab.profile.publish",
 } as const;
 
 const WsServerUpsertKeybindingRpc = Rpc.make(WS_METHODS.serverUpsertKeybinding, {
@@ -2448,6 +2451,12 @@ const WsCodeItLabEngagementsApplyToJobRpc = Rpc.make(WS_METHODS.codeitlabEngagem
   error: CodeItLabRpcError,
 });
 
+const WsCodeItLabProfilePublishRpc = Rpc.make(WS_METHODS.codeitlabProfilePublish, {
+  payload: CodeItLabProfilePublishInput,
+  success: CodeItLabProfilePublishResult,
+  error: CodeItLabRpcError,
+});
+
 const WsCodeItLabRemoteStatusRpc = Rpc.make(WS_METHODS.codeitlabRemoteStatus, {
   payload: Schema.Struct({}),
   success: CodeItLabRemoteStatus,
@@ -2585,6 +2594,7 @@ export const WsRpcGroup = RpcGroup.make(
   WsCodeItLabEngagementsDeliverRpc,
   WsCodeItLabEngagementsTransitionRpc,
   WsCodeItLabEngagementsApplyToJobRpc,
+  WsCodeItLabProfilePublishRpc,
   WsCodeItLabCredentialsRestoreRpc,
   WsCodeItLabCredentialsStartRpc,
   WsCodeItLabCredentialsStopRpc,

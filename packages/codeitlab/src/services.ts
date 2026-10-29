@@ -32,6 +32,8 @@ import type {
   CodeItLabDeliveryResult,
   CodeItLabEngagementApplyToJobInput,
   CodeItLabEngagementApplyToJobResult,
+  CodeItLabProfilePublishInput,
+  CodeItLabProfilePublishResult,
   CodeItLabEngagementTransitionInput,
   CodeItLabEngagementTransitionResult,
   CodeItLabEngagementBridge,
@@ -510,5 +512,12 @@ export class EngagementsService extends Context.Service<
     readonly applyToJob: (
       input: CodeItLabEngagementApplyToJobInput,
     ) => Effect.Effect<CodeItLabEngagementApplyToJobResult, CodeItLabServiceError>;
+    /**
+     * Copy the user's profile to the marketplace so a business can read it. Only
+     * the fields the profile screen shows are sent; nothing is inferred.
+     */
+    readonly publishProfile: (
+      input: CodeItLabProfilePublishInput,
+    ) => Effect.Effect<CodeItLabProfilePublishResult, CodeItLabServiceError>;
   }
 >()("@codeitlab/core/services/EngagementsService") {}

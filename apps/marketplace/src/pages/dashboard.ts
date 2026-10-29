@@ -13,7 +13,12 @@ import {
   repeatSourceFor,
   type RepeatSource,
 } from "../server/jobs.ts";
-import { findCoderRowById, getBusinessProfile, getCoderProfile } from "../server/profiles.ts";
+import {
+  findCoderRowById,
+  formatWorkEntry,
+  getBusinessProfile,
+  getCoderProfile,
+} from "../server/profiles.ts";
 import { listInvitesForCoder } from "../server/invites.ts";
 import { recommendedJobsForCoder } from "../server/recommendations.ts";
 import { findJobTemplate, JOB_TEMPLATES, type JobTemplate } from "../server/jobTemplates.ts";
@@ -73,6 +78,8 @@ function coderProfileSection(ctx: AppContext, account: AccountRow): string {
           .map(([skill, level]) => `${skill}=${level}`)
           .join("\n");
   const evidenceText = profile === null ? "" : profile.evidence.join("\n");
+  const workHistoryText =
+    profile === null ? "" : profile.workHistory.map(formatWorkEntry).join("\n");
 
   return `<section class="stack">
     <div class="section-head">
@@ -94,6 +101,7 @@ function coderProfileSection(ctx: AppContext, account: AccountRow): string {
       ${field({ name: "skills", label: "Skills", required: true, value: profile?.skills.join(", ") ?? "", placeholder: "React, TypeScript, Node.js, SQLite", hint: "Comma separated, at most 30." })}
       ${field({ name: "interests", label: "Interests", value: profile?.interests.join(", ") ?? "", placeholder: "web, ai, video", hint: "The fields you want paid work in (web, video, data, ops, design, ai, other). Matching rewards the overlap with a job's field." })}
       ${textareaField({ name: "skillLevels", label: "Skill levels", value: skillLevelsText, rows: 3, placeholder: "React=5\nTypeScript=4\nSQLite=3", hint: "Optional: Skill=1–5, one per line. Matching rewards depth on the skills a job asks for." })}
+      ${textareaField({ name: "workHistory", label: "What you have worked on", value: workHistoryText, rows: 4, placeholder: "Senior engineer at Acme (2021 - 2024): Led the billing rewrite.\nFounding engineer at Beta (2019 - 2021): Built the first version alone.", hint: "One job per line as Role at Company (period): what you did. Period and company are optional." })}
       ${textareaField({ name: "evidence", label: "Evidence links", value: evidenceText, rows: 3, placeholder: "https://github.com/you/project\nhttps://you.dev/case-study", hint: "Up to 5 http(s) links that prove the work: repos, case studies, deliveries." })}
       ${selectField({ name: "availability", label: "Availability", value: profile?.availability ?? "part_time", choices: AVAILABILITY_CHOICES })}
       ${field({ name: "rateMinCents", label: "Minimum rate in cents (100 = 1 unit)", type: "number", required: true, min: 0, value: profile?.rateMinCents ?? 3000, step: 100 })}

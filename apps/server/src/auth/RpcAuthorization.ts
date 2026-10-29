@@ -156,6 +156,8 @@ export const RPC_REQUIRED_SCOPES = {
   [WS_METHODS.codeitlabEngagementsTransition]: AuthSettingsWriteScope,
   // Applying reaches out to the marketplace on the user's behalf, like delivering.
   [WS_METHODS.codeitlabEngagementsApplyToJob]: AuthSettingsWriteScope,
+  // Publishing writes the user's profile to the marketplace on their behalf.
+  [WS_METHODS.codeitlabProfilePublish]: AuthSettingsWriteScope,
   [WS_METHODS.codeitlabTasksList]: AuthOrchestrationReadScope,
   // Tasks are durable user state, so writing them takes the write scope.
   [WS_METHODS.codeitlabTasksUpsert]: AuthSettingsWriteScope,

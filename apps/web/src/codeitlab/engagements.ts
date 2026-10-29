@@ -13,6 +13,8 @@ import {
   type CodeItLabEngagementMessageResult,
   type CodeItLabEngagementMessages,
   type CodeItLabEngagementTransitionResult,
+  type CodeItLabProfilePublishInput,
+  type CodeItLabProfilePublishResult,
   type EngagementStatus,
   type EnvironmentId,
 } from "@codeitlab/contracts";
@@ -456,6 +458,27 @@ export function useCodeItLabEngagementApplyToJob(environmentId: EnvironmentId | 
   ): Promise<CodeItLabEngagementApplyToJobResult | null> => {
     if (environmentId === null) return null;
     const result = await applyCommand({ environmentId, input });
+    return result._tag === "Success" ? result.value : null;
+  };
+}
+export const codeitlabProfilePublishCommand = createEnvironmentRpcCommand(connectionAtomRuntime, {
+  label: "codeitlab:profile:publish",
+  tag: WS_METHODS.codeitlabProfilePublish,
+});
+
+/**
+ * Publishing copies the profile to the marketplace once, on the click that asks
+ * for it. Nothing retries behind the user, so a refusal is reported verbatim.
+ */
+export function useCodeItLabProfilePublish(environmentId: EnvironmentId | null) {
+  const publishCommand = useAtomCommand(codeitlabProfilePublishCommand, {
+    reportFailure: false,
+  });
+  return async (
+    input: CodeItLabProfilePublishInput,
+  ): Promise<CodeItLabProfilePublishResult | null> => {
+    if (environmentId === null) return null;
+    const result = await publishCommand({ environmentId, input });
     return result._tag === "Success" ? result.value : null;
   };
 }

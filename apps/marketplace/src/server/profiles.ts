@@ -5,6 +5,7 @@ import {
   type Availability,
   type BusinessProfile,
   type CoderProfile,
+  type WorkHistoryEntry,
 } from "../shared/contracts.ts";
 import type { AppContext } from "./context.ts";
 import { execute, queryAll, queryOne } from "./db.ts";
@@ -24,9 +25,12 @@ import {
   type Body,
 } from "./validate.ts";
 
+/** A profile is a summary; more than this and nobody reads it. */
+const MAX_WORK_ENTRIES = 20;
+
 const CODER_COLUMNS = `
   id, account_id AS accountId, display_name AS displayName, headline, bio, skills,
-  interests, skill_levels AS skillLevels, evidence,
+  interests, skill_levels AS skillLevels, evidence, work_history AS workHistory,
   availability, rate_min_cents AS rateMinCents, rate_max_cents AS rateMaxCents,
   currency, timezone, links, approved, created_at AS createdAt, updated_at AS updatedAt
 `;
@@ -45,6 +49,121 @@ function parseJsonArray(raw: string): string[] {
   } catch {
     return [];
   }
+}
+
+/**
+ * Rows are written by normaliseWorkHistory below, but the column also has to
+ * survive a hand-edited database and older values, so anything that is not a
+ * well-formed entry is dropped rather than surfaced as a broken profile.
+ */
+function parseWorkHistory(raw: string): WorkHistoryEntry[] {
+  try {
+    const value: unknown = JSON.parse(raw);
+    if (!Array.isArray(value)) return [];
+    const entries: WorkHistoryEntry[] = [];
+    for (const item of value) {
+      if (typeof item !== "object" || item === null) continue;
+      const record = item as Record<string, unknown>;
+      const company = typeof record.company === "string" ? record.company.trim() : "";
+      const role = typeof record.role === "string" ? record.role.trim() : "";
+      const summary = typeof record.summary === "string" ? record.summary.trim() : "";
+      // A row with neither a company, a role nor a summary says nothing.
+      if (company === "" && role === "" && summary === "") continue;
+      const period = typeof record.period === "string" ? record.period.trim() : "";
+      entries.push({ company, role, period, summary });
+    }
+    return entries.slice(0, MAX_WORK_ENTRIES);
+  } catch {
+    return [];
+  }
+}
+
+const WORK_FIELD_LIMITS = { company: 120, role: 120, period: 40, summary: 1_000 } as const;
+
+/**
+ * "Role at Company (period): summary" is the shape the dashboard form shows,
+ * and every part after the role is optional so a one-line entry is enough.
+ */
+export function parseWorkLine(line: string): WorkHistoryEntry {
+  const text = line.trim();
+  if (text === "") return { company: "", role: "", period: "", summary: "" };
+
+  const separator = text.indexOf(":");
+  const heading = separator === -1 ? text : text.slice(0, separator);
+  const summary = separator === -1 ? "" : text.slice(separator + 1).trim();
+
+  const periodMatch = /\(([^()]*)\)\s*$/u.exec(heading);
+  const period = periodMatch?.[1]?.trim() ?? "";
+  const withoutPeriod = periodMatch === null ? heading : heading.slice(0, periodMatch.index);
+
+  const atMatch = /\s+at\s+/iu.exec(withoutPeriod);
+  const role = (atMatch === null ? withoutPeriod : withoutPeriod.slice(0, atMatch.index)).trim();
+  const company = (
+    atMatch === null ? "" : withoutPeriod.slice(atMatch.index + atMatch[0].length)
+  ).trim();
+
+  return { company, role, period, summary };
+}
+
+/** The inverse, so the form shows back exactly what the person wrote. */
+export function formatWorkEntry(entry: WorkHistoryEntry): string {
+  const heading = [entry.role, entry.company === "" ? "" : `at ${entry.company}`]
+    .filter((part) => part !== "")
+    .join(" ");
+  const period = entry.period === "" ? "" : ` (${entry.period})`;
+  const summary = entry.summary === "" ? "" : `: ${entry.summary}`;
+  return `${heading}${period}${summary}`;
+}
+
+/**
+ * Input side of the column: unlike the stored form this rejects bad shapes
+ * loudly, because it runs while the person is still on the form. Blank rows are
+ * skipped so an empty table row left behind on screen is not an error.
+ */
+function normaliseWorkHistory(raw: unknown): WorkHistoryEntry[] {
+  if (raw === undefined || raw === null || raw === "") return [];
+  // The dashboard form posts lines of text while the app posts the structured
+  // entries, so both shapes arrive here and are judged by the same rules.
+  if (typeof raw === "string") return raw.split("\n").map(parseWorkLine);
+  if (!Array.isArray(raw)) {
+    throw badRequest("Work history must be a list of jobs.", "invalid_work_history");
+  }
+  if (raw.length > MAX_WORK_ENTRIES) {
+    throw badRequest(`Keep work history to ${MAX_WORK_ENTRIES} entries.`, "invalid_work_history");
+  }
+
+  const entries: WorkHistoryEntry[] = [];
+  for (const item of raw) {
+    if (typeof item !== "object" || item === null || Array.isArray(item)) {
+      throw badRequest("Each work history entry must be a job.", "invalid_work_history");
+    }
+    const record = item as Record<string, unknown>;
+    const field = (key: keyof typeof WORK_FIELD_LIMITS): string => {
+      const value = record[key];
+      if (value === undefined || value === null) return "";
+      if (typeof value !== "string") {
+        throw badRequest(`Work entry ${key} must be text.`, "invalid_work_history");
+      }
+      const trimmed = value.trim();
+      if (trimmed.length > WORK_FIELD_LIMITS[key]) {
+        throw badRequest(
+          `Work entry ${key} must be at most ${WORK_FIELD_LIMITS[key]} characters.`,
+          "invalid_work_history",
+        );
+      }
+      return trimmed;
+    };
+
+    const entry: WorkHistoryEntry = {
+      company: field("company"),
+      role: field("role"),
+      period: field("period"),
+      summary: field("summary"),
+    };
+    if (entry.company === "" && entry.role === "" && entry.summary === "") continue;
+    entries.push(entry);
+  }
+  return entries;
 }
 
 function parseJsonNumberRecord(raw: string): Record<string, number> {
@@ -87,6 +206,7 @@ export function toCoderProfile(row: CoderProfileRow): CoderProfile {
     interests: parseJsonArray(row.interests),
     skillLevels: parseJsonNumberRecord(row.skillLevels),
     evidence: parseJsonArray(row.evidence),
+    workHistory: parseWorkHistory(row.workHistory),
     availability: row.availability,
     rateMinCents: Number(row.rateMinCents),
     rateMaxCents: Number(row.rateMaxCents),
@@ -158,6 +278,7 @@ export function upsertCoderProfile(ctx: AppContext, account: AccountRow, body: B
   const interests = parseSkills(body.interests, "Interests");
   const skillLevels = parseSkillLevels(body.skillLevels);
   const evidence = parseEvidence(body.evidence);
+  const workHistory = normaliseWorkHistory(body.workHistory);
   const now = ctx.now().toISOString();
 
   const existing = findCoderRowByAccount(ctx, account.id);
@@ -166,7 +287,7 @@ export function upsertCoderProfile(ctx: AppContext, account: AccountRow, body: B
       ctx.db,
       `UPDATE coder_profiles SET
         display_name = ?, headline = ?, bio = ?, skills = ?, interests = ?,
-        skill_levels = ?, evidence = ?, availability = ?,
+        skill_levels = ?, evidence = ?, work_history = ?, availability = ?,
         rate_min_cents = ?, rate_max_cents = ?, currency = ?, timezone = ?, links = ?, updated_at = ?
        WHERE id = ?`,
       [
@@ -177,6 +298,7 @@ export function upsertCoderProfile(ctx: AppContext, account: AccountRow, body: B
         JSON.stringify(interests),
         JSON.stringify(skillLevels),
         JSON.stringify(evidence),
+        JSON.stringify(workHistory),
         availability,
         rateMinCents,
         rateMaxCents,
@@ -196,6 +318,7 @@ export function upsertCoderProfile(ctx: AppContext, account: AccountRow, body: B
       interests: JSON.stringify(interests),
       skillLevels: JSON.stringify(skillLevels),
       evidence: JSON.stringify(evidence),
+      workHistory: JSON.stringify(workHistory),
       availability,
       rateMinCents,
       rateMaxCents,
@@ -211,9 +334,9 @@ export function upsertCoderProfile(ctx: AppContext, account: AccountRow, body: B
     ctx.db,
     `INSERT INTO coder_profiles
       (id, account_id, display_name, headline, bio, skills, interests, skill_levels, evidence,
-       availability, rate_min_cents, rate_max_cents, currency, timezone, links, approved,
-       created_at, updated_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+       work_history, availability, rate_min_cents, rate_max_cents, currency, timezone, links,
+       approved, created_at, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     [
       id,
       account.id,
@@ -224,6 +347,7 @@ export function upsertCoderProfile(ctx: AppContext, account: AccountRow, body: B
       JSON.stringify(interests),
       JSON.stringify(skillLevels),
       JSON.stringify(evidence),
+      JSON.stringify(workHistory),
       availability,
       rateMinCents,
       rateMaxCents,

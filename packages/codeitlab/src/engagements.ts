@@ -387,6 +387,38 @@ export const CodeItLabEngagementApplyToJobResult = Schema.Struct({
 });
 export type CodeItLabEngagementApplyToJobResult = typeof CodeItLabEngagementApplyToJobResult.Type;
 
+/**
+ * Publishing the app's profile to the marketplace is a one-way copy of what the
+ * user chose to show. Nothing here is derived from their work, so the app sends
+ * exactly the fields the profile screen displays.
+ */
+export const CodeItLabProfilePublishInput = Schema.Struct({
+  /** Only a profile the user marked visible leaves the app. */
+  visibleToBusinesses: Schema.Boolean,
+  displayName: Schema.String,
+  headline: Schema.String,
+  bio: Schema.String,
+  skills: Schema.Array(Schema.String),
+  interests: Schema.Array(Schema.String),
+  workHistory: Schema.Array(
+    Schema.Struct({
+      company: Schema.String,
+      role: Schema.String,
+      period: Schema.String,
+      summary: Schema.String,
+    }),
+  ),
+});
+export type CodeItLabProfilePublishInput = typeof CodeItLabProfilePublishInput.Type;
+
+export const CodeItLabProfilePublishResult = Schema.Struct({
+  published: Schema.Boolean,
+  /** A URL a person can send to a business, when the marketplace returned one. */
+  profileUrl: Schema.optional(Schema.String),
+  reason: Schema.optional(Schema.String),
+});
+export type CodeItLabProfilePublishResult = typeof CodeItLabProfilePublishResult.Type;
+
 /** Trimmed note check, shared so the review form can block a send before a round-trip. */
 export function deliveryNoteProblem(note: string): string {
   const trimmed = note.trim();

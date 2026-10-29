@@ -12,6 +12,8 @@ type Profile = ReturnType<typeof emptyProfile>;
 const mock = vi.hoisted(() => ({
   profile: {} as Record<string, unknown>,
   updates: [] as Array<{ profile: Record<string, unknown> }>,
+  published: [] as Array<Record<string, unknown>>,
+  reply: { published: true, profileUrl: "https://acme.example/market/coders/coder-1" } as unknown,
 }));
 
 vi.mock(import("../../codeitlab/effectsSettings"), async (original) => ({
@@ -27,10 +29,19 @@ vi.mock(import("../../codeitlab/effectsSettings"), async (original) => ({
   })) as never,
 }));
 
+vi.mock(import("../../codeitlab/engagements"), async (original) => ({
+  ...(await original()),
+  useCodeItLabProfilePublish: (() => async (input: Record<string, unknown>) => {
+    mock.published.push(input);
+    return mock.reply;
+  }) as never,
+}));
+
 function reset(overrides: Partial<Profile> = {}) {
   const profile = { ...emptyProfile(), ...overrides };
   mock.profile = profile as unknown as Record<string, unknown>;
   mock.updates.length = 0;
+  mock.published.length = 0;
   return profile;
 }
 
@@ -114,5 +125,38 @@ describe("profile page", () => {
     expect(screen.getByText("Only you can see this.")).not.toBeNull();
     await userEvent.click(screen.getByRole("switch", { name: "Show my profile to businesses" }));
     expect(mock.updates.at(-1)?.profile.visibleToBusinesses).toBe(true);
+  });
+  it("sends the preview to businesses once visibility is on", async () => {
+    reset({
+      fullName: "Maria",
+      headline: "Product engineer",
+      skillset: "TypeScript, SQLite",
+      interestDomain: "web",
+      visibleToBusinesses: true,
+      workHistory: [{ company: "Acme", role: "Engineer", period: "2021", summary: "Billing." }],
+    });
+    await using screen = await renderUi(<CodeItLabProfilePage />);
+    await userEvent.click(screen.getByRole("button", { name: "Publish to businesses" }));
+    expect(mock.published).toHaveLength(1);
+    expect(mock.published[0]).toEqual({
+      visibleToBusinesses: true,
+      displayName: "Maria",
+      headline: "Product engineer",
+      bio: "TypeScript, SQLite",
+      skills: ["TypeScript", "SQLite"],
+      interests: ["web"],
+      workHistory: [{ company: "Acme", role: "Engineer", period: "2021", summary: "Billing." }],
+    });
+  });
+
+  it("cannot publish while the profile stays private", async () => {
+    reset({ fullName: "Maria" });
+    await using screen = await renderUi(<CodeItLabProfilePage />);
+    const button = [
+      ...screen.container.querySelectorAll<HTMLButtonElement>("[data-slot=button]"),
+    ].find((node) => node.textContent === "Publish to businesses");
+    // A disabled control swallows the click, so the check is that nothing was sent.
+    expect(button?.disabled).toBe(true);
+    expect(mock.published).toHaveLength(0);
   });
 });

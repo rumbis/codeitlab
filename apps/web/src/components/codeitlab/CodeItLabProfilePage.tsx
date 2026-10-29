@@ -7,14 +7,24 @@ import {
   type CodeItLabWorkHistoryEntry,
 } from "@codeitlab/core/profile";
 import { CopyIcon, PlusIcon, Trash2Icon } from "lucide-react";
+import { useState } from "react";
 
 import { useCodeItLabSettingsWriter } from "../../codeitlab/effectsSettings";
+import { useCodeItLabProfilePublish } from "../../codeitlab/engagements";
 import { Button } from "../ui/button";
 import { Input } from "../ui/input";
 import { Switch } from "../ui/switch";
 import { Textarea } from "../ui/textarea";
 import { toastManager } from "../ui/toast";
 import { CodeItLabCard, CodeItLabEmptyBlock, CodeItLabSectionHeading } from "./CodeItLabPrimitives";
+
+/** The comma-separated fields a person typed, as the list the marketplace stores. */
+function splitList(value: string): string[] {
+  return value
+    .split(",")
+    .map((part) => part.trim())
+    .filter((part) => part !== "");
+}
 
 /**
  * The declaration a person makes about their own work: who they are, what they
@@ -28,6 +38,8 @@ export function CodeItLabProfilePage() {
   const steps = profileSteps(profile);
   const work = profileWorkHistory(profile);
   const summary = profilePublicSummary(profile);
+  const publish = useCodeItLabProfilePublish(null);
+  const [publishing, setPublishing] = useState(false);
 
   const patch = (next: Partial<typeof profile>) => {
     update({ profile: { ...profile, ...next } });
@@ -68,6 +80,52 @@ export function CodeItLabProfilePage() {
         title: "Clipboard is not available",
         description: "Select the text in the preview and copy it manually.",
       });
+    }
+  };
+
+  // Publishing is the only write this screen makes on the user's behalf, so it
+  // sends exactly what the preview shows and refuses while the switch is off.
+  const publishProfile = async () => {
+    setPublishing(true);
+    try {
+      const result = await publish({
+        visibleToBusinesses: profile.visibleToBusinesses,
+        displayName: profile.fullName,
+        headline: profile.headline,
+        bio: profile.skillset,
+        skills: splitList(profile.skillset),
+        interests: splitList(profile.interestDomain),
+        workHistory: work.map((entry) => ({
+          company: entry.company,
+          role: entry.role,
+          period: entry.period,
+          summary: entry.summary,
+        })),
+      });
+      if (result === null) {
+        toastManager.add({
+          type: "error",
+          title: "Could not publish",
+          description: "The app could not reach its own server. Try again in a moment.",
+        });
+      } else if (!result.published) {
+        toastManager.add({
+          type: "error",
+          title: "Not published",
+          description: result.reason ?? "The marketplace did not accept the profile.",
+        });
+      } else {
+        toastManager.add({
+          type: "success",
+          title: "Profile published",
+          description:
+            result.profileUrl === undefined
+              ? "Businesses on our site can see it now."
+              : "Businesses can see it here: " + result.profileUrl,
+        });
+      }
+    } finally {
+      setPublishing(false);
     }
   };
 
@@ -290,11 +348,23 @@ export function CodeItLabProfilePage() {
             >
               {summary}
             </pre>
-            <p className="text-2xs text-muted-foreground">
-              {profile.visibleToBusinesses
-                ? "Visible to businesses on our site."
-                : "Only you can see this."}
-            </p>
+            <div className="flex items-center justify-between gap-3">
+              <p className="text-2xs text-muted-foreground">
+                {profile.visibleToBusinesses
+                  ? "Visible to businesses on our site."
+                  : "Only you can see this."}
+              </p>
+              <Button
+                disabled={!profile.visibleToBusinesses || publishing}
+                onClick={() => {
+                  void publishProfile();
+                }}
+                size="sm"
+                variant="outline"
+              >
+                {publishing ? "Publishing…" : "Publish to businesses"}
+              </Button>
+            </div>
           </div>
         )}
       </CodeItLabCard>

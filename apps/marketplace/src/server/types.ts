@@ -22,6 +22,8 @@ export interface CoderProfileRow {
   readonly interests: string;
   readonly skillLevels: string;
   readonly evidence: string;
+  /** JSON array of WorkHistoryEntry. */
+  readonly workHistory: string;
   readonly availability: Availability;
   readonly rateMinCents: number;
   readonly rateMaxCents: number;

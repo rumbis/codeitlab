@@ -275,6 +275,7 @@ const RPC_AGGREGATES = {
   [WS_METHODS.codeitlabEngagementsDeliver]: "codeitlab",
   [WS_METHODS.codeitlabEngagementsTransition]: "codeitlab",
   [WS_METHODS.codeitlabEngagementsApplyToJob]: "codeitlab",
+  [WS_METHODS.codeitlabProfilePublish]: "codeitlab",
   [WS_METHODS.codeitlabTasksList]: "codeitlab",
   [WS_METHODS.codeitlabTasksUpsert]: "codeitlab",
   [WS_METHODS.codeitlabTasksRemove]: "codeitlab",

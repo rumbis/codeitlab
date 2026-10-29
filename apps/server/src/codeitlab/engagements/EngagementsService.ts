@@ -19,6 +19,8 @@ import {
   type CodeItLabEngagement,
   type CodeItLabEngagementApplyToJobInput,
   type CodeItLabEngagementApplyToJobResult,
+  type CodeItLabProfilePublishInput,
+  type CodeItLabProfilePublishResult,
   type CodeItLabEngagementTransitionInput,
   type CodeItLabEngagementTransitionResult,
   type CodeItLabEngagementBridge,
@@ -744,6 +746,72 @@ export const makeEngagementsService = (
   });
 
   /**
+   * Copy the profile to the marketplace. The user has already decided this is
+   * public by switching "show to businesses" on, so the app sends only what the
+   * profile screen shows and lets the marketplace own the public row.
+   */
+  const publishProfile = Effect.fn("Engagements.publishProfile")(function* (
+    input: CodeItLabProfilePublishInput,
+  ) {
+    if (!input.visibleToBusinesses) {
+      return {
+        published: false,
+        reason: "The profile is private. Turn on showing it to businesses first.",
+      } satisfies CodeItLabProfilePublishResult;
+    }
+    const current = yield* context;
+    if (!current.settings.enabled || current.bridge.url === "") {
+      return { published: false, reason: "Marketplace not configured." };
+    }
+    if (current.token === null || current.token === "") {
+      return { published: false, reason: "Marketplace token not configured." };
+    }
+    const response = yield* request({
+      method: "POST",
+      url: current.bridge.url + "/api/coders/profile",
+      token: current.token,
+      body: {
+        displayName: input.displayName,
+        headline: input.headline,
+        bio: input.bio,
+        skills: input.skills.join(", "),
+        interests: input.interests.join(", "),
+        workHistory: input.workHistory
+          .map((entry) => {
+            const heading = [entry.role, entry.company === "" ? "" : "at " + entry.company]
+              .filter((part) => part !== "")
+              .join(" ");
+            const period = entry.period === "" ? "" : " (" + entry.period + ")";
+            const summary = entry.summary === "" ? "" : ": " + entry.summary;
+            return heading + period + summary;
+          })
+          .join("\n"),
+      },
+      timeoutMs: REQUEST_TIMEOUT_MS,
+    }).pipe(Effect.catch(() => Effect.succeed({ status: 0, text: "" } satisfies HttpJsonResult)));
+    if (response.status === 0) {
+      return { published: false, reason: "Could not reach marketplace." };
+    }
+    if (response.status >= 200 && response.status < 300) {
+      const body = asRecord(parseJson(response.text));
+      const coder = asRecord(body?.["coder"]);
+      const id = coder?.["id"];
+      return {
+        published: true,
+        ...(typeof id === "string" && id !== ""
+          ? { profileUrl: current.bridge.url + "/coders/" + encodeURIComponent(id) }
+          : {}),
+      } satisfies CodeItLabProfilePublishResult;
+    }
+    const body = parseJson(response.text);
+    return {
+      published: false,
+      reason:
+        messageOf(body) === "" ? "Marketplace returned " + response.status + "." : messageOf(body),
+    } satisfies CodeItLabProfilePublishResult;
+  });
+
+  /**
    * Move an engagement along. The marketplace owns which transitions are legal
    * for which role, so a refusal is reported verbatim rather than guessed at
    * here: a coder cannot approve and a business cannot start, and only the
@@ -809,6 +877,7 @@ export const makeEngagementsService = (
     deliver,
     transition,
     applyToJob,
+    publishProfile,
   });
 };
 

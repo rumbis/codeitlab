@@ -666,6 +666,83 @@ describe("applyToJob", () => {
   );
 });
 
+describe("publishProfile", () => {
+  const profile = {
+    visibleToBusinesses: true,
+    displayName: "Ada Lovelace",
+    headline: "Product engineer",
+    bio: "I build small, reliable web products.",
+    skills: ["TypeScript", "SQLite"],
+    interests: ["web"],
+    workHistory: [
+      { company: "Acme", role: "Senior engineer", period: "2021 - 2024", summary: "Billing." },
+      { company: "", role: "Freelance designer", period: "", summary: "" },
+    ],
+  };
+
+  it.effect("sends what the profile screen shows and reports the public URL", () =>
+    Effect.gen(function* () {
+      const { service: svc, calls } = service({
+        url: "https://acme.example/market",
+        token: "mk_abc",
+        respond: () => ({ status: 200, text: JSON.stringify({ coder: { id: "coder-1" } }) }),
+      });
+      const result = yield* svc.publishProfile(profile);
+      expect(calls[0]).toMatchObject({
+        method: "POST",
+        url: "https://acme.example/market/api/coders/profile",
+        body: {
+          displayName: "Ada Lovelace",
+          skills: "TypeScript, SQLite",
+          interests: "web",
+          workHistory: "Senior engineer at Acme (2021 - 2024): Billing.\nFreelance designer",
+        },
+      });
+      expect(result).toEqual({
+        published: true,
+        profileUrl: "https://acme.example/market/coders/coder-1",
+      });
+    }),
+  );
+
+  it.effect("does not send anything for a profile the user keeps private", () =>
+    Effect.gen(function* () {
+      const { service: svc, calls } = service({
+        url: "https://acme.example/market",
+        token: "mk_abc",
+      });
+      const result = yield* svc.publishProfile({ ...profile, visibleToBusinesses: false });
+      expect(result.published).toBe(false);
+      expect(result.reason).toContain("private");
+      expect(calls).toHaveLength(0);
+    }),
+  );
+
+  it.effect("reports the marketplace refusing the profile", () =>
+    Effect.gen(function* () {
+      const { service: svc } = service({
+        url: "https://acme.example/market",
+        token: "mk_abc",
+        respond: () => ({
+          status: 400,
+          text: JSON.stringify({ message: "Headline is required." }),
+        }),
+      });
+      const result = yield* svc.publishProfile({ ...profile, headline: "" });
+      expect(result).toEqual({ published: false, reason: "Headline is required." });
+    }),
+  );
+
+  it.effect("refuses to publish without a token", () =>
+    Effect.gen(function* () {
+      const { service: svc, calls } = service({ url: "https://acme.example/market", token: null });
+      const result = yield* svc.publishProfile(profile);
+      expect(result).toEqual({ published: false, reason: "Marketplace token not configured." });
+      expect(calls).toHaveLength(0);
+    }),
+  );
+});
+
 describe("deliveryHandoff", () => {
   const modelSelection = { instanceId: "claude-main", model: "claude-sonnet" };
 
