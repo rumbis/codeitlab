@@ -321,6 +321,18 @@ describe("credentials engine: masked environment for programs", () => {
     assert.match(record["CODEITLAB_MASKED_API_KEY_1"] ?? "", /^sk-proj-/);
   });
 
+  it("gives a program a fake password, never the one the user typed", () => {
+    // A password the user wrote into a config file is the case the mask exists
+    // for: the program still needs a value that works in its own loop, but the
+    // real one must not be readable from its environment.
+    const vault = new CredentialVault();
+    maskText("password: hunter2-prod-db", options(), vault);
+    const record = maskedEnvironmentRecord(maskedEnvironment(vault.entries()));
+    assert.notInclude(JSON.stringify(record), "hunter2-prod-db");
+    const published = Object.values(record).filter((value) => value !== "");
+    assert.equal(published.length, 1);
+  });
+
   it("is empty when nothing was masked", () => {
     assert.deepEqual(maskedEnvironment(new CredentialVault().entries()), []);
   });
