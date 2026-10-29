@@ -72,6 +72,8 @@ import {
   type CodeItLabEngagementMessageResult,
   type CodeItLabEngagementApplyToJobInput,
   type CodeItLabEngagementApplyToJobResult,
+  type CodeItLabEngagementTransitionInput,
+  type CodeItLabEngagementTransitionResult,
   type CodeItLabEngagementMessages,
   type CodeItLabEngagementMessagesInput,
   type CodeItLabDeliveryDraft,
@@ -309,6 +311,9 @@ export interface CodeItLabRpcHandlers {
   readonly "codeitlab.engagements.deliver": (
     input: CodeItLabDeliveryInput,
   ) => Effect.Effect<CodeItLabDeliveryResult, CodeItLabServiceError>;
+  readonly "codeitlab.engagements.transition": (
+    input: CodeItLabEngagementTransitionInput,
+  ) => Effect.Effect<CodeItLabEngagementTransitionResult, CodeItLabServiceError>;
   readonly "codeitlab.engagements.applyToJob": (
     input: CodeItLabEngagementApplyToJobInput,
   ) => Effect.Effect<CodeItLabEngagementApplyToJobResult, CodeItLabServiceError>;
@@ -477,6 +482,7 @@ export const makeCodeItLabRpcHandlers: Effect.Effect<
     "codeitlab.engagements.deliveryDraft": (input) => engagements.draftDelivery(input),
     "codeitlab.engagements.deliveryHandoff": (input) => engagements.deliveryHandoff(input),
     "codeitlab.engagements.deliver": (input) => engagements.deliver(input),
+    "codeitlab.engagements.transition": (input) => engagements.transition(input),
     "codeitlab.engagements.applyToJob": (input) => engagements.applyToJob(input),
   };
 });

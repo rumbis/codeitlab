@@ -5,6 +5,7 @@ import {
   deliveryHandoffNote,
   deliveryNoteProblem,
   ENGAGEMENT_MAX_MESSAGE_LENGTH,
+  engagementAvailableActions,
   engagementIsActive,
   engagementMessageProblem,
   engagementNextStep,
@@ -12,6 +13,41 @@ import {
   isHttpUrl,
   normalizeMarketplaceUrl,
 } from "./engagements.ts";
+
+describe("engagementAvailableActions", () => {
+  it("offers the coder the moves that are theirs and no approve", () => {
+    const statuses = ["requested", "accepted", "in_progress", "delivered"] as const;
+    const offered = statuses.map((status) =>
+      engagementAvailableActions("coder", status).map((entry) => entry.action),
+    );
+    expect(offered).toEqual([
+      ["accept", "cancel"],
+      ["start", "cancel", "dispute"],
+      ["cancel", "dispute"],
+      ["dispute"],
+    ]);
+  });
+
+  it("lets only the business release a delivered engagement", () => {
+    const actions = engagementAvailableActions("business", "delivered").map(
+      (entry) => entry.action,
+    );
+    expect(actions).toContain("approve");
+    expect(actions).not.toContain("start");
+    expect(engagementAvailableActions("coder", "delivered").map((e) => e.action)).not.toContain(
+      "approve",
+    );
+  });
+
+  it("offers nothing once the engagement is over", () => {
+    const finished = ["approved", "paid_out", "cancelled", "disputed"] as const;
+    for (const role of ["coder", "business"] as const) {
+      for (const status of finished) {
+        expect(engagementAvailableActions(role, status)).toEqual([]);
+      }
+    }
+  });
+});
 
 describe("normalizeMarketplaceUrl", () => {
   it("keeps a deployment mounted under a path and drops the trailing slash", () => {

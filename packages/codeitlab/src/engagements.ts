@@ -170,6 +170,34 @@ export function formatEngagementAmount(cents: number, currency: string): string 
  * The one next step for this side of the engagement. A client-side derivation of
  * the marketplace state machine, kept here so the panel and the docs agree.
  */
+/**
+ * The transitions this side could take from here. It mirrors the marketplace's
+ * own rules so a panel does not offer a button that would come back refused, but
+ * it is only a hint: the marketplace decides, and its refusal is what the caller
+ * should show.
+ */
+export function engagementAvailableActions(
+  role: EngagementRole,
+  status: EngagementStatus,
+): ReadonlyArray<{ readonly action: CodeItLabEngagementAction; readonly label: string }> {
+  const actions: Array<{ action: CodeItLabEngagementAction; label: string }> = [];
+  if (role === "coder") {
+    if (status === "requested") actions.push({ action: "accept", label: "Accept" });
+    if (status === "accepted") actions.push({ action: "start", label: "Start work" });
+  }
+  // Only the business that funded the engagement may release the escrow.
+  if (role === "business" && status === "delivered") {
+    actions.push({ action: "approve", label: "Approve and release" });
+  }
+  if (status === "requested" || status === "accepted" || status === "in_progress") {
+    actions.push({ action: "cancel", label: "Cancel" });
+  }
+  if (status === "accepted" || status === "in_progress" || status === "delivered") {
+    actions.push({ action: "dispute", label: "Dispute" });
+  }
+  return actions;
+}
+
 export function engagementNextStep(role: EngagementRole, status: EngagementStatus): string {
   if (status === "cancelled") return "This engagement was cancelled; nothing to do.";
   if (status === "disputed") return "A dispute is open; the marketplace decides the outcome.";
@@ -318,6 +346,34 @@ export const CodeItLabDeliveryResult = Schema.Struct({
   reason: Schema.String,
 });
 export type CodeItLabDeliveryResult = typeof CodeItLabDeliveryResult.Type;
+
+/**
+ * The transitions the marketplace accepts on an engagement. Delivery goes
+ * through its own path because it carries a note and evidence; the rest move
+ * the status and nothing else, so they share one command.
+ */
+export const CodeItLabEngagementAction = Schema.Literals([
+  "accept",
+  "start",
+  "approve",
+  "cancel",
+  "dispute",
+]);
+export type CodeItLabEngagementAction = typeof CodeItLabEngagementAction.Type;
+
+export const CodeItLabEngagementTransitionInput = Schema.Struct({
+  engagementId: Schema.String,
+  action: CodeItLabEngagementAction,
+});
+export type CodeItLabEngagementTransitionInput = typeof CodeItLabEngagementTransitionInput.Type;
+
+export const CodeItLabEngagementTransitionResult = Schema.Struct({
+  transitioned: Schema.Boolean,
+  engagement: Schema.NullOr(CodeItLabEngagement),
+  bridge: CodeItLabEngagementBridge,
+  reason: Schema.String,
+});
+export type CodeItLabEngagementTransitionResult = typeof CodeItLabEngagementTransitionResult.Type;
 
 export const CodeItLabEngagementApplyToJobInput = Schema.Struct({
   jobId: Schema.String,

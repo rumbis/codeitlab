@@ -151,6 +151,9 @@ export const RPC_REQUIRED_SCOPES = {
   [WS_METHODS.codeitlabEngagementsDeliveryHandoff]: AuthOrchestrationReadScope,
   // Delivering moves the engagement on the marketplace, so it takes the write scope.
   [WS_METHODS.codeitlabEngagementsDeliver]: AuthSettingsWriteScope,
+  // Accepting, approving and cancelling change who owes what, so they take the
+  // write scope for the same reason delivering does.
+  [WS_METHODS.codeitlabEngagementsTransition]: AuthSettingsWriteScope,
   // Applying reaches out to the marketplace on the user's behalf, like delivering.
   [WS_METHODS.codeitlabEngagementsApplyToJob]: AuthSettingsWriteScope,
   [WS_METHODS.codeitlabTasksList]: AuthOrchestrationReadScope,

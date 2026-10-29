@@ -163,6 +163,7 @@ export const unavailableCodeItLabHandlers: CodeItLabRpcHandlers = {
   "codeitlab.engagements.deliveryDraft": unavailable("codeitlab.engagements.deliveryDraft"),
   "codeitlab.engagements.deliveryHandoff": unavailable("codeitlab.engagements.deliveryHandoff"),
   "codeitlab.engagements.deliver": unavailable("codeitlab.engagements.deliver"),
+  "codeitlab.engagements.transition": unavailable("codeitlab.engagements.transition"),
   "codeitlab.engagements.applyToJob": unavailable("codeitlab.engagements.applyToJob"),
 };
 

@@ -32,6 +32,8 @@ import type {
   CodeItLabDeliveryResult,
   CodeItLabEngagementApplyToJobInput,
   CodeItLabEngagementApplyToJobResult,
+  CodeItLabEngagementTransitionInput,
+  CodeItLabEngagementTransitionResult,
   CodeItLabEngagementBridge,
   CodeItLabEngagementConfigureInput,
   CodeItLabEngagementList,
@@ -488,6 +490,13 @@ export class EngagementsService extends Context.Service<
     readonly deliver: (
       input: CodeItLabDeliveryInput,
     ) => Effect.Effect<CodeItLabDeliveryResult, CodeItLabServiceError>;
+    /**
+     * Accept, start, approve, cancel or dispute an engagement. Delivery has its
+     * own call because it carries a note; these move the status and nothing else.
+     */
+    readonly transition: (
+      input: CodeItLabEngagementTransitionInput,
+    ) => Effect.Effect<CodeItLabEngagementTransitionResult, CodeItLabServiceError>;
     /** Apply to a marketplace job; the marketplace owns whether the application is accepted. */
     readonly applyToJob: (
       input: CodeItLabEngagementApplyToJobInput,

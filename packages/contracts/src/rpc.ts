@@ -88,6 +88,8 @@ import {
   CodeItLabDeliveryResult,
   CodeItLabEngagementApplyToJobInput,
   CodeItLabEngagementApplyToJobResult,
+  CodeItLabEngagementTransitionInput,
+  CodeItLabEngagementTransitionResult,
   SandboxHealth,
   SandboxInstallResult,
   SandboxMachineCreateInput,
@@ -721,6 +723,7 @@ export const WS_METHODS = {
   codeitlabEngagementsDeliveryDraft: "codeitlab.engagements.deliveryDraft",
   codeitlabEngagementsDeliveryHandoff: "codeitlab.engagements.deliveryHandoff",
   codeitlabEngagementsDeliver: "codeitlab.engagements.deliver",
+  codeitlabEngagementsTransition: "codeitlab.engagements.transition",
   codeitlabEngagementsApplyToJob: "codeitlab.engagements.applyToJob",
 } as const;
 
@@ -2433,6 +2436,12 @@ const WsCodeItLabEngagementsDeliverRpc = Rpc.make(WS_METHODS.codeitlabEngagement
   error: CodeItLabRpcError,
 });
 
+const WsCodeItLabEngagementsTransitionRpc = Rpc.make(WS_METHODS.codeitlabEngagementsTransition, {
+  payload: CodeItLabEngagementTransitionInput,
+  success: CodeItLabEngagementTransitionResult,
+  error: CodeItLabRpcError,
+});
+
 const WsCodeItLabEngagementsApplyToJobRpc = Rpc.make(WS_METHODS.codeitlabEngagementsApplyToJob, {
   payload: CodeItLabEngagementApplyToJobInput,
   success: CodeItLabEngagementApplyToJobResult,
@@ -2574,6 +2583,7 @@ export const WsRpcGroup = RpcGroup.make(
   WsCodeItLabEngagementsDeliveryDraftRpc,
   WsCodeItLabEngagementsDeliveryHandoffRpc,
   WsCodeItLabEngagementsDeliverRpc,
+  WsCodeItLabEngagementsTransitionRpc,
   WsCodeItLabEngagementsApplyToJobRpc,
   WsCodeItLabCredentialsRestoreRpc,
   WsCodeItLabCredentialsStartRpc,

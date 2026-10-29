@@ -1,9 +1,11 @@
 import {
+  engagementAvailableActions,
   engagementMessageProblem,
   formatEngagementAmount,
   isHttpUrl,
   normalizeMarketplaceUrl,
   type CodeItLabEngagement,
+  type CodeItLabEngagementAction,
   type CodeItLabEngagementBridge,
   type CodeItLabEngagementConfigureInput,
 } from "@codeitlab/contracts";
@@ -35,10 +37,11 @@ import {
 } from "./CodeItLabPrimitives";
 
 /**
- * Engagements are work the marketplace already tracks: this panel reads them and
- * posts messages into the thread the marketplace owns. It holds no money, decides
- * no release and invents no engagement, so every state it cannot reach is shown
- * as a sentence instead of a button.
+ * Engagements are work the marketplace already tracks: this panel reads them,
+ * posts messages and moves them along the states the marketplace allows. It
+ * holds no money and invents no engagement, and it never decides which
+ * transitions are legal — the buttons below only offer what this side could do
+ * next, and the marketplace still refuses anything it disagrees with.
  */
 export function CodeItLabEngagementsPage() {
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -47,6 +50,8 @@ export function CodeItLabEngagementsPage() {
   const [saving, setSaving] = useState(false);
   const [bridgeNotice, setBridgeNotice] = useState<string | null>(null);
   const [threadNotice, setThreadNotice] = useState<string | null>(null);
+  const [transitioning, setTransitioning] = useState<CodeItLabEngagementAction | null>(null);
+  const [actionNotice, setActionNotice] = useState<string | null>(null);
   const view = useCodeItLabEngagements(selectedId);
   const { bridge, engagements, error, fetchedAt, isPending, refreshBridge, refreshList, thread } =
     view;
@@ -107,6 +112,23 @@ export function CodeItLabEngagementsPage() {
         ? "The bridge is on; the panel reads and polls every 15 seconds."
         : "The bridge is off. The URL and token stay saved.",
     );
+  };
+
+  const move = async (id: string, action: CodeItLabEngagementAction) => {
+    setTransitioning(action);
+    setActionNotice(null);
+    const result = await view.transition(id, action);
+    setTransitioning(null);
+    if (result === null) {
+      setActionNotice("The marketplace did not answer, so nothing changed.");
+      return;
+    }
+    if (!result.transitioned) {
+      setActionNotice(result.reason);
+      return;
+    }
+    // The new status arrives from the refreshed list rather than from a guess here.
+    setActionNotice("The marketplace recorded the change.");
   };
 
   const send = async () => {
@@ -201,6 +223,8 @@ export function CodeItLabEngagementsPage() {
                     key={engagement.id}
                     onSelect={(id) => {
                       setThreadNotice(null);
+                      // A refusal belongs to the engagement that produced it.
+                      setActionNotice(null);
                       setSelectedId((current) => (current === id ? null : id));
                     }}
                     selected={engagement.id === selectedId}
@@ -248,6 +272,26 @@ export function CodeItLabEngagementsPage() {
                   </div>
                 </div>
                 <p className="text-xs text-muted-foreground">Next: {selected.nextStep}</p>
+                {readOnly ? null : (
+                  <div className="mt-2 flex flex-wrap items-center gap-2">
+                    {engagementAvailableActions(selected.role, selected.status).map((entry) => (
+                      <Button
+                        disabled={transitioning !== null}
+                        key={entry.action}
+                        onClick={() => void move(selected.id, entry.action)}
+                        size="sm"
+                        variant={entry.action === "approve" ? "default" : "outline"}
+                      >
+                        {transitioning === entry.action ? "Working…" : entry.label}
+                      </Button>
+                    ))}
+                  </div>
+                )}
+                {actionNotice === null ? null : (
+                  <p className="mt-2 text-xs text-muted-foreground" role="status">
+                    {actionNotice}
+                  </p>
+                )}
               </div>
 
               <ThreadBody thread={thread} />

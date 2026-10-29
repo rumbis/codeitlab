@@ -4,6 +4,7 @@ import {
   type CodeItLabDeliveryHandoff,
   type CodeItLabDeliveryResult,
   type CodeItLabEngagement,
+  type CodeItLabEngagementAction,
   type CodeItLabEngagementApplyToJobInput,
   type CodeItLabEngagementApplyToJobResult,
   type CodeItLabEngagementBridge,
@@ -11,6 +12,7 @@ import {
   type CodeItLabEngagementMessage,
   type CodeItLabEngagementMessageResult,
   type CodeItLabEngagementMessages,
+  type CodeItLabEngagementTransitionResult,
   type EngagementStatus,
   type EnvironmentId,
 } from "@codeitlab/contracts";
@@ -30,8 +32,9 @@ import { useAtomCommand } from "../state/use-atom-command";
  * Client half of the marketplace bridge. The marketplace is a separate
  * deployment the user runs; the server owns the HTTP calls, the token and the
  * opt-in, so this module only asks it what it already knows and renders that.
- * Nothing here decides money: the panel reads engagements and posts messages to
- * the thread the marketplace owns.
+ * Nothing here decides money: the panel reads engagements, posts messages to the
+ * thread the marketplace owns, and asks it to move a status along. Every
+ * transition is a request — the marketplace can still refuse it.
  */
 
 /** Poll interval for a usable, opted-in bridge. The page pauses it while hidden. */
@@ -99,6 +102,14 @@ export const codeitlabEngagementDeliverCommand = createEnvironmentRpcCommand(
   },
 );
 
+export const codeitlabEngagementTransitionCommand = createEnvironmentRpcCommand(
+  connectionAtomRuntime,
+  {
+    label: "codeitlab:engagements:transition",
+    tag: WS_METHODS.codeitlabEngagementsTransition,
+  },
+);
+
 export const codeitlabEngagementDeliveryHandoffCommand = createEnvironmentRpcCommand(
   connectionAtomRuntime,
   {
@@ -131,6 +142,11 @@ export interface CodeItLabEngagementsView {
     engagementId: string,
     body: string,
   ) => Promise<CodeItLabEngagementMessageResult | null>;
+  /** Accept, start, approve, cancel or dispute; the marketplace decides what is legal. */
+  readonly transition: (
+    engagementId: string,
+    action: CodeItLabEngagementAction,
+  ) => Promise<CodeItLabEngagementTransitionResult | null>;
   readonly configure: (
     input: CodeItLabEngagementConfigureInput,
   ) => Promise<CodeItLabEngagementBridge | null>;
@@ -158,6 +174,9 @@ export function useCodeItLabEngagements(engagementId: string | null): CodeItLabE
     reportFailure: false,
   });
   const configureCommand = useAtomCommand(codeitlabEngagementConfigureCommand, {
+    reportFailure: false,
+  });
+  const transitionCommand = useAtomCommand(codeitlabEngagementTransitionCommand, {
     reportFailure: false,
   });
 
@@ -192,6 +211,19 @@ export function useCodeItLabEngagements(engagementId: string | null): CodeItLabE
       if (result._tag !== "Success") return null;
       // The marketplace is the record; refresh both views so the panel cannot
       // show a thread that disagrees with the list.
+      refreshList();
+      refreshThread();
+      return result.value;
+    },
+    transition: async (id, action) => {
+      if (environmentId === null) return null;
+      const result = await transitionCommand({
+        environmentId,
+        input: { engagementId: id, action },
+      });
+      if (result._tag !== "Success") return null;
+      // The status and the next step both move with the transition, so the list
+      // and the thread would otherwise disagree with what just happened.
       refreshList();
       refreshThread();
       return result.value;

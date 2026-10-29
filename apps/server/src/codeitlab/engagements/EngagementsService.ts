@@ -19,6 +19,8 @@ import {
   type CodeItLabEngagement,
   type CodeItLabEngagementApplyToJobInput,
   type CodeItLabEngagementApplyToJobResult,
+  type CodeItLabEngagementTransitionInput,
+  type CodeItLabEngagementTransitionResult,
   type CodeItLabEngagementBridge,
   type CodeItLabEngagementConfigureInput,
   type CodeItLabEngagementList,
@@ -741,6 +743,61 @@ export const makeEngagementsService = (
     } satisfies CodeItLabEngagementApplyToJobResult;
   });
 
+  /**
+   * Move an engagement along. The marketplace owns which transitions are legal
+   * for which role, so a refusal is reported verbatim rather than guessed at
+   * here: a coder cannot approve and a business cannot start, and only the
+   * marketplace knows that.
+   */
+  const transition = Effect.fn("Engagements.transition")(function* (
+    input: CodeItLabEngagementTransitionInput,
+  ) {
+    const current = yield* context;
+    const engagementId = input.engagementId.trim();
+    const refusal = (reason: string): CodeItLabEngagementTransitionResult => ({
+      transitioned: false,
+      engagement: null,
+      bridge: current.bridge.readOnly
+        ? current.bridge
+        : { ...current.bridge, readOnly: true, reason },
+      reason,
+    });
+    if (engagementId === "") return refusal("An engagement id is required.");
+    if (current.bridge.readOnly) return refusal(current.bridge.reason);
+    const response = yield* request({
+      method: "POST",
+      url:
+        current.bridge.url +
+        "/api/engagements/" +
+        encodeURIComponent(engagementId) +
+        "/" +
+        input.action,
+      token: current.token ?? "",
+      body: {},
+      timeoutMs: REQUEST_TIMEOUT_MS,
+    }).pipe(Effect.catch(() => Effect.succeed({ status: 0, text: "" } satisfies HttpJsonResult)));
+    if (response.status === 0) {
+      return refusal("Could not reach " + current.bridge.url + "; nothing changed.");
+    }
+    const raw: unknown = parseJson(response.text);
+    if (response.status !== 200) {
+      const message = messageOf(raw);
+      return refusal(
+        message === "" ? "The marketplace refused the change (" + response.status + ")." : message,
+      );
+    }
+    const engagement = toEngagement(asRecord(raw)?.["engagement"]);
+    if (engagement === null) {
+      return refusal("The marketplace accepted the change but returned nothing to show.");
+    }
+    return {
+      transitioned: true,
+      engagement,
+      bridge: current.bridge,
+      reason: "",
+    } satisfies CodeItLabEngagementTransitionResult;
+  });
+
   return EngagementsServiceTag.of({
     bridge,
     list,
@@ -750,6 +807,7 @@ export const makeEngagementsService = (
     draftDelivery,
     deliveryHandoff,
     deliver,
+    transition,
     applyToJob,
   });
 };
