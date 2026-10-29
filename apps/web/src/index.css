@@ -1192,6 +1192,325 @@ html[data-codeitlab-wallpaper="true"] [data-slot="sidebar"] {
   );
 }
 
+/* ---------------------------------------------------------------------------
+ * The vibe signal field: the workspace's identity layer.
+ *
+ * CodeItLab's colour language already means one thing everywhere: phosphor
+ * green is settled, amber needs a look, red is broken. Full-bleed atmosphere
+ * existed only in Settings, so the room the user actually works in read as a
+ * plain glass box. The field brings that identity to the coding surface as one
+ * instrument instead of decoration.
+ *
+ * Cost contract: pure gradients plus one slow transform per layer. Nothing
+ * repaints per frame and no JavaScript runs, so a 120 Hz display pays for
+ * compositing only. Every animation stops under reduced motion or
+ * `data-motion="still"`.
+ * ------------------------------------------------------------------------- */
+.vibe-signal-field {
+  contain: strict;
+}
+
+/* Awaiting: the agent is blocked on the user. Amber is CodeItLab's
+   "needs a look" colour, so the room uses it to ask rather than to report.
+   Deliberately the slowest breath of the three tones: a fast pulse would read
+   as urgency, and urgency that the agent invents is a lie about the work. */
+.vibe-signal-field[data-tone="awaiting"] {
+  --vibe-horizon:
+    radial-gradient(
+      ellipse 68% 44% at 50% 84%,
+      color-mix(in srgb, var(--color-warning) 20%, transparent),
+      transparent 70%
+    ),
+    radial-gradient(
+      ellipse 118% 84% at 50% 118%,
+      color-mix(in srgb, var(--color-warning) 8%, transparent),
+      transparent 76%
+    ),
+    linear-gradient(
+      to bottom,
+      color-mix(in srgb, var(--color-warning) 4%, transparent) 0%,
+      color-mix(in srgb, var(--color-warning) 6.5%, transparent) 52%,
+      transparent 78%
+    );
+  /* The grid carries the shape of the request, so it has to survive a light
+     page where amber's own luminance collapses against the background. It is
+     drawn at the strongest alpha of the three tones on purpose: awaiting is
+     the state that asks the user for something, and it was the quietest grid
+     in the set before this. */
+  --vibe-floor-x: repeating-linear-gradient(
+    to right,
+    color-mix(in srgb, var(--color-warning) 30%, transparent) 0 1px,
+    transparent 1px 4rem
+  );
+  --vibe-floor-y: repeating-linear-gradient(
+    to bottom,
+    color-mix(in srgb, var(--color-warning) 22%, transparent) 0 1px,
+    transparent 1px 3rem
+  );
+  --vibe-well: radial-gradient(
+    ellipse 54% 28% at 50% 90%,
+    color-mix(in srgb, var(--color-warning) 12%, transparent),
+    transparent 73%
+  );
+  --vibe-wall: repeating-linear-gradient(
+    to right,
+    color-mix(in srgb, var(--color-warning) 15%, transparent) 0 1px,
+    transparent 1px calc(100% / 8)
+  );
+  --vibe-floor-alpha: 0.32;
+  --vibe-breath: 14s;
+}
+
+/* Tone sets the hue once, as literal colours. Lightning CSS rewrites custom
+   properties inside gradients to a shortened name and stops matching the
+   references, so each tone writes its own gradients instead of indirection. */
+.vibe-signal-field {
+  /* Two lights, not one: a broad wash climbing the back wall so the middle of
+     the room is never dead, and a tighter horizon where the wall meets the
+     floor. A single low ellipse read as a lamp on the ground. */
+  --vibe-horizon:
+    radial-gradient(
+      ellipse 74% 46% at 50% 84%,
+      color-mix(in srgb, var(--codeitlab-green) 17%, transparent),
+      transparent 70%
+    ),
+    radial-gradient(
+      ellipse 120% 85% at 50% 118%,
+      color-mix(in srgb, var(--codeitlab-green) 7%, transparent),
+      transparent 76%
+    ),
+    linear-gradient(
+      to bottom,
+      color-mix(in srgb, var(--codeitlab-green) 3.5%, transparent) 0%,
+      color-mix(in srgb, var(--codeitlab-green) 6%, transparent) 52%,
+      transparent 78%
+    );
+  --vibe-floor-x: linear-gradient(
+    to right,
+    color-mix(in srgb, var(--codeitlab-green) 22%, transparent) 1px,
+    transparent 1px
+  );
+  --vibe-floor-y: linear-gradient(
+    to bottom,
+    color-mix(in srgb, var(--codeitlab-green) 16%, transparent) 1px,
+    transparent 1px
+  );
+  --vibe-well: radial-gradient(
+    ellipse 58% 26% at 50% 92%,
+    color-mix(in srgb, var(--codeitlab-green) 12%, transparent),
+    transparent 74%
+  );
+  /* The back wall. Without it the field is light with no room around it: the
+     eye reads glow, not a place. Eight bays of faint vertical joints, shaded
+     by the same horizon gradient, give the light somewhere to land. */
+  --vibe-wall: repeating-linear-gradient(
+    to right,
+    color-mix(in srgb, var(--codeitlab-green) 8%, transparent) 0 1px,
+    transparent 1px calc(100% / 8)
+  );
+  --vibe-floor-alpha: 0.3;
+  --vibe-breath: 9s;
+}
+
+.vibe-signal-field[data-tone="working"] {
+  --vibe-horizon:
+    radial-gradient(
+      ellipse 74% 48% at 50% 84%,
+      color-mix(in srgb, var(--codeitlab-cyan) 21%, transparent),
+      transparent 70%
+    ),
+    radial-gradient(
+      ellipse 120% 88% at 50% 118%,
+      color-mix(in srgb, var(--codeitlab-cyan) 9%, transparent),
+      transparent 76%
+    ),
+    linear-gradient(
+      to bottom,
+      color-mix(in srgb, var(--codeitlab-cyan) 4.5%, transparent) 0%,
+      color-mix(in srgb, var(--codeitlab-cyan) 7.5%, transparent) 52%,
+      transparent 78%
+    );
+  --vibe-floor-x: linear-gradient(
+    to right,
+    color-mix(in srgb, var(--codeitlab-cyan) 26%, transparent) 1px,
+    transparent 1px
+  );
+  --vibe-floor-y: linear-gradient(
+    to bottom,
+    color-mix(in srgb, var(--codeitlab-cyan) 18%, transparent) 1px,
+    transparent 1px
+  );
+  --vibe-well: radial-gradient(
+    ellipse 46% 30% at 50% 86%,
+    color-mix(in srgb, var(--codeitlab-cyan) 12%, transparent),
+    transparent 72%
+  );
+  --vibe-wall: repeating-linear-gradient(
+    to right,
+    color-mix(in srgb, var(--codeitlab-cyan) 11%, transparent) 0 1px,
+    transparent 1px calc(100% / 8)
+  );
+  --vibe-floor-alpha: 0.34;
+  --vibe-breath: 3.2s;
+}
+
+/* Wall: the room's architecture. Joints are strongest at the top and dissolve
+   before they reach the horizon, so they read as a back wall receding into the
+   light rather than stripes laid over it. */
+.vibe-signal-wall {
+  background-image: var(--vibe-wall);
+  mask-image: linear-gradient(to bottom, #000 0%, #000 26%, transparent 62%);
+}
+
+/* Horizon: the glow that reads as the agent’s attention resting on the page. */
+.vibe-signal-horizon {
+  background-image: var(--vibe-horizon);
+  animation: vibe-signal-breath var(--vibe-breath) ease-in-out infinite;
+  will-change: opacity;
+}
+
+/* Floor: a perspective lattice receding under the prompt. The mask fades the
+   lines before they reach text, so contrast stays predictable. */
+.vibe-signal-floor {
+  background-image: var(--vibe-floor-x), var(--vibe-floor-y);
+  background-size: 4rem 3rem;
+  opacity: var(--vibe-floor-alpha);
+  transform: perspective(46rem) rotateX(64deg) scale(2.2);
+  transform-origin: 50% 100%;
+  mask-image: radial-gradient(ellipse 70% 92% at 50% 100%, #000 6%, transparent 78%);
+  animation: vibe-signal-crawl 24s linear infinite;
+  /* The crawl moves background-position, not transform, so advertising
+     "transform" would only pin a needless compositor layer. */
+  will-change: background-position;
+}
+
+/* Well: one soft lift so the composer sits in the scene instead of floating. */
+.vibe-signal-well {
+  background-image: var(--vibe-well);
+}
+
+/* In light mode the same percentages sit on a #e8f1ec page instead of near
+   black, so every tone loses most of its measured range. The tone that loses
+   the most is the one that matters most: awaiting, the state that asks the user
+   for something, collapsed to the same visible spread as idle. Lift the alphas
+   only where the background is light rather than brightening the amber token,
+   which also colours warning text and badges. */
+@media (prefers-color-scheme: light) {
+  .vibe-signal-field {
+    --vibe-floor-alpha: 0.5;
+  }
+
+  .vibe-signal-field[data-tone="awaiting"] {
+    --vibe-floor-alpha: 0.55;
+    /* Amber-700 sits close to a #e8f1ec page in luminance, so raising its alpha
+       alone still measured weaker than the other two tones. Line thickness is
+       the one channel that does not depend on contrast, so the request keeps
+       its shape on a light page by drawing heavier lines rather than more
+       colour. */
+    --vibe-floor-x: repeating-linear-gradient(
+      to right,
+      color-mix(in srgb, var(--color-warning) 34%, transparent) 0 2px,
+      transparent 2px 4rem
+    );
+    --vibe-floor-y: repeating-linear-gradient(
+      to bottom,
+      color-mix(in srgb, var(--color-warning) 26%, transparent) 0 2px,
+      transparent 2px 3rem
+    );
+    --vibe-wall: repeating-linear-gradient(
+      to right,
+      color-mix(in srgb, var(--color-warning) 22%, transparent) 0 2px,
+      transparent 2px calc(100% / 8)
+    );
+  }
+
+  .composer-tone-rim::before {
+    --composer-rim: color-mix(in srgb, var(--codeitlab-green) 42%, transparent);
+  }
+
+  .composer-tone-rim[data-tone="awaiting"]::before {
+    --composer-rim: color-mix(in srgb, var(--color-warning) 52%, transparent);
+  }
+}
+
+/* The composer rim: light collecting on the edge of the pane that sits over the
+   floor. It is the one place the field touches a control, so the tone reaches
+   the surface the user actually types into without restyling any primitive. */
+/* The rim rides the shell's existing ::before glass layer, so the composer
+   gains a lit edge without adding a node or a second blur pass. */
+.composer-tone-rim::before {
+  --composer-rim: color-mix(in srgb, var(--codeitlab-green) 26%, transparent);
+  box-shadow:
+    inset 0 1px 0 0 var(--composer-rim),
+    0 0 0 1px color-mix(in srgb, var(--codeitlab-green) 8%, transparent);
+  animation: vibe-signal-rim var(--vibe-breath, 9s) ease-in-out infinite;
+}
+
+.composer-tone-rim[data-tone="awaiting"]::before {
+  --composer-rim: color-mix(in srgb, var(--color-warning) 30%, transparent);
+  box-shadow:
+    inset 0 1px 0 0 var(--composer-rim),
+    0 0 0 1px color-mix(in srgb, var(--color-warning) 11%, transparent);
+}
+
+.composer-tone-rim[data-tone="working"]::before {
+  --composer-rim: color-mix(in srgb, var(--codeitlab-cyan) 34%, transparent);
+  box-shadow:
+    inset 0 1px 0 0 var(--composer-rim),
+    0 0 0 1px color-mix(in srgb, var(--codeitlab-cyan) 12%, transparent);
+}
+
+@keyframes vibe-signal-rim {
+  0%,
+  100% {
+    opacity: 0.55;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .composer-tone-rim {
+    animation: none;
+  }
+}
+
+@keyframes vibe-signal-breath {
+  0%,
+  100% {
+    opacity: 0.55;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+
+/* One full cell, so the loop has no seam. */
+@keyframes vibe-signal-crawl {
+  from {
+    background-position: 0 0;
+  }
+  to {
+    background-position: 0 3rem;
+  }
+}
+
+/* Compositor-only motion still respects the user’s system preference. */
+@media (prefers-reduced-motion: reduce) {
+  .vibe-signal-horizon,
+  .vibe-signal-floor {
+    animation: none;
+    will-change: auto;
+  }
+}
+
+.vibe-signal-field[data-motion="still"] .vibe-signal-horizon,
+.vibe-signal-field[data-motion="still"] .vibe-signal-floor {
+  animation: none;
+  will-change: auto;
+}
+
 @utility codeitlab-mono-label {
   font-family: var(--font-mono);
   font-size: 0.625rem;

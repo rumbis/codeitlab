@@ -1,15 +1,22 @@
 import type { ComponentProps } from "react";
 
+import type { VibeSignalTone } from "../../codeitlab/vibeSignal";
 import { cn } from "~/lib/utils";
 
 function Shell({
   contextStrip = false,
+  tone,
   className,
   ...props
-}: ComponentProps<"div"> & { contextStrip?: boolean }) {
+}: ComponentProps<"div"> & {
+  contextStrip?: boolean;
+  /** Mirrors the vibe field's tone so light collects on the composer rim. */
+  tone?: VibeSignalTone;
+}) {
   return (
     <div
       data-slot="composer-shell"
+      data-tone={tone}
       data-with-context={contextStrip || undefined}
       className={cn(
         "@container/composer-surface group/composer-surface relative isolate mx-auto w-full max-w-(--chat-content-max-width)",
@@ -19,6 +26,7 @@ function Shell({
         "dark:[html[data-theme-id]:not([data-theme-id=cil-chat])_&]:[--chat-composer-highlight:color-mix(in_srgb,var(--app-theme-input)_12%,transparent)] dark:[html[data-theme-id]:not([data-theme-id=cil-chat])_&]:[--chat-composer-outline:color-mix(in_srgb,var(--app-theme-input)_30%,var(--background))]",
         "dark:[html[data-theme-id=cil-chat]_&]:[--chat-composer-highlight:color-mix(in_srgb,#432d48_12%,transparent)] dark:[html[data-theme-id=cil-chat]_&]:[--chat-composer-outline:#241e28]",
         "before:pointer-events-none before:absolute before:inset-0 before:z-0 before:rounded-3xl before:bg-(--chat-composer-glass-surface)/(--glass-opacity) before:backdrop-blur-(--glass-blur) before:backdrop-saturate-(--glass-saturation)",
+        "composer-tone-rim",
         "not-supports-[((backdrop-filter:blur(1px))_or_(-webkit-backdrop-filter:blur(1px)))]:before:bg-(--chat-composer-glass-surface)",
         "has-data-[composer-banner-surface=attached]:before:hidden data-model-strip-transition:before:hidden",
         contextStrip && [

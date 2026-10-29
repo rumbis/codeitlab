@@ -3,6 +3,8 @@ import { resolvePathLinkTarget } from "@codeitlab/shared/fileLinks";
 import { ThreadFind, ThreadFindCanvas, type ThreadFindControls } from "./chat/ThreadFindProvider";
 import { THREAD_FIND_BAR_RESERVED_HEIGHT } from "./chat/ThreadFindBar";
 import { usageLimitRecoveryBannerItem } from "./chat/UsageLimitRecoveryBanner";
+import { VibeSignalField } from "./codeitlab/VibeSignalField";
+import { vibeSignalTone } from "../codeitlab/vibeSignal";
 import {
   isThreadWokeUnseen,
   mergeDirectPreviewAnnotation,
@@ -2672,6 +2674,15 @@ export default function ChatView(props: ChatViewProps) {
   const activeWorkStartedAt =
     deriveActiveWorkStartedAt(activeActivityRun, activeRuntime, localDispatchStartedAt) ??
     runlessWorkStartedAt;
+  // The field and the composer rim read one value, so the room and the surface
+  // in it can never disagree about what the agent is doing.
+  const vibeTone = vibeSignalTone({
+    awaiting:
+      activePendingApproval !== null ||
+      activePendingUserInput !== null ||
+      activeThreadShell?.hasPendingUserInput === true,
+    running: activeWorkStartedAt !== null,
+  });
   const activeRunPreparing = activeActivityRun?.status === "preparing";
   const sendQueuesBehindSetup =
     isServerThread && (activeRunPreparing || activeActivityRun?.status === "starting");
@@ -8257,6 +8268,13 @@ export default function ChatView(props: ChatViewProps) {
               />
             </div>
             <div className="relative flex min-h-0 flex-1 flex-col bg-background">
+              {/*
+                Atmosphere used to exist only in Settings, so the room the user
+                actually codes in read as a flat glass box. The field is the
+                thread's own light: behind the timeline, inert, and still under
+                reduced motion.
+              */}
+              <VibeSignalField tone={vibeTone} />
               <MessagesTimeline
                 citationRequest={paintOnlyDisplayedTimeline ? null : citationRequest}
                 citationHistoryLoading={threadDetailLoading}
@@ -8451,6 +8469,7 @@ export default function ChatView(props: ChatViewProps) {
                     }
                   >
                     <ComposerSurface.Shell
+                      tone={vibeTone}
                       contextStrip={showComposerContextStrip || showComposerModelStrip}
                     >
                       <ComposerSurface.Host
