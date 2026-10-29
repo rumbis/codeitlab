@@ -18,6 +18,8 @@ import {
 } from "@codeitlab/core/credentials";
 import {
   CredentialVault,
+  maskedEnvironmentRecord,
+  maskedEnvironment,
   maskText,
   maskValue,
   type CredentialsEngineOptions,
@@ -823,6 +825,12 @@ export const makeCredentialsService = Effect.fn("codeitlab.credentials.service.m
     return modelStatus(state);
   });
 
+  const programEnvironment = Effect.fn("codeitlab.credentials.programEnvironment")(function* () {
+    const settings = yield* deps.readSettings;
+    if (!settings.exposeKeywordsToPrograms) return {};
+    return maskedEnvironmentRecord(maskedEnvironment(vault.entries()));
+  });
+
   const service = CredentialsServiceTag.of({
     status: status(),
     update,
@@ -831,6 +839,7 @@ export const makeCredentialsService = Effect.fn("codeitlab.credentials.service.m
     start: start(),
     stop: stop(),
     downloadModel: downloadModel(),
+    programEnvironment: programEnvironment(),
   });
 
   const close = Effect.gen(function* () {

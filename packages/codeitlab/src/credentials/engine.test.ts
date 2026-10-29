@@ -4,6 +4,8 @@ import type { CodeItLabCredentialsMode } from "../credentials.ts";
 import {
   createFake,
   CredentialVault,
+  maskedEnvironment,
+  maskedEnvironmentRecord,
   maskText,
   maskValue,
   type CredentialsEngineOptions,
@@ -46,6 +48,34 @@ describe("credentials engine: detectors", () => {
     assert.strictEqual(result.findings[0]?.kind, "password");
   });
 
+  it("masks an email address and a password in every mode, including secrets", () => {
+    const text = "Write to maria@example.com, password: correct-horse-battery";
+    for (const mode of ["secrets", "balanced", "max"] as const) {
+      for (const maskPersonalData of [true, false]) {
+        const result = maskText(text, options({ mode, maskPersonalData }));
+        assert.notInclude(
+          result.masked,
+          "maria@example.com",
+          `${mode}/${maskPersonalData} leaked the address`,
+        );
+        assert.notInclude(
+          result.masked,
+          "correct-horse-battery",
+          `${mode}/${maskPersonalData} leaked the password`,
+        );
+        const kinds = result.findings.map((finding) => finding.kind);
+        assert.include(kinds, "email");
+        assert.include(kinds, "password");
+      }
+    }
+  });
+
+  it("still masks the other personal data only when asked", () => {
+    const text = "call +306912345678";
+    assert.include(maskText(text, options({ mode: "secrets" })).masked, "+306912345678");
+    assert.notInclude(maskText(text, options({ mode: "balanced" })).masked, "+306912345678");
+  });
+
   it("masks an .env line value", () => {
     const result = maskText("OPENAI_API_KEY=sk-live-abcdef0123456789abcdef\nDEBUG=1", options());
     assert.notInclude(result.masked, "sk-live-abcdef0123456789abcdef");
@@ -84,20 +114,22 @@ describe("credentials engine: detectors", () => {
     assert.notInclude(balanced.masked, "emily.carter@example.com");
     assert.notInclude(balanced.masked, "690 123 4567");
     assert.match(balanced.masked, /GB\d{2}[A-Z0-9]{18}/);
+    // The address is the exception: it names a person, so "secrets" still masks it.
     const secrets = maskText(text, options({ mode: "secrets", maskPersonalData: false }));
-    assert.include(secrets.masked, "emily.carter@example.com");
+    assert.notInclude(secrets.masked, "emily.carter@example.com");
+    assert.include(secrets.masked, "690 123 4567");
   });
 
   it("keeps personal data when the personal switch is off, whatever the mode", () => {
     const text =
       "mail emily.carter@example.com, IBAN GB82WEST12345698765432, key sk-proj-AbCdEf0123456789AbCdEf0123456789AbCdEf0123456789";
     const off = maskText(text, options({ maskPersonalData: false }));
-    assert.include(off.masked, "emily.carter@example.com");
+    assert.notInclude(off.masked, "emily.carter@example.com");
     assert.include(off.masked, "GB82WEST12345698765432");
     assert.notInclude(off.masked, "sk-proj-AbCdEf0123456789AbCdEf0123456789AbCdEf0123456789");
-    // The mode still gates the personal rules: "secrets" never masks them.
+    // Neither the switch nor the mode reaches the address.
     const secrets = maskText(text, options({ mode: "secrets", maskPersonalData: true }));
-    assert.include(secrets.masked, "emily.carter@example.com");
+    assert.notInclude(secrets.masked, "emily.carter@example.com");
   });
 
   it("masks private IPs in maximum mode even with personal data off", () => {
@@ -238,5 +270,58 @@ describe("credentials engine: fake shapes", () => {
   it("keeps an email readable and never the original domain", () => {
     const fake = createFake("email", "emily.carter@acme-internal.example", "k");
     assert.match(fake, /^user_[a-z]{8}@masked\.invalid$/);
+  });
+});
+describe("credentials engine: declared keywords", () => {
+  it("masks a keyword in every mode, whatever the personal switch says", () => {
+    const text = "Our client Acme Holdings wants a rebuild";
+    for (const mode of ["secrets", "balanced", "max"] as const) {
+      const result = maskText(
+        text,
+        options({ mode, maskPersonalData: false, keywords: ["Acme Holdings"] }),
+      );
+      assert.notInclude(result.masked, "Acme Holdings", `${mode} leaked the keyword`);
+      assert.include(result.masked, "Our client ");
+      assert.strictEqual(result.findings[0]?.kind, "keyword");
+      assert.strictEqual(result.findings[0]?.source, "keyword");
+    }
+  });
+
+  it("is case-insensitive and survives a round trip through the vault", () => {
+    const vault = new CredentialVault();
+    const result = maskText("ping maria and Maria again", options({ keywords: ["maria"] }), vault);
+    assert.notInclude(result.masked.toLowerCase(), "maria");
+    assert.strictEqual(vault.restore(result.masked).text, "ping maria and Maria again");
+  });
+
+  it("ignores very short words and does not match inside a longer word", () => {
+    assert.strictEqual(maskText("a cat", options({ keywords: ["a"] })).findings.length, 0);
+    assert.notInclude(maskText("catacombs", options({ keywords: ["cat"] })).masked, "kw_");
+  });
+
+  it("accepts a keyword that starts or ends outside a word boundary", () => {
+    const result = maskText("mail @acme.co today", options({ keywords: ["@acme.co"] }));
+    assert.notInclude(result.masked, "@acme.co");
+  });
+});
+
+describe("credentials engine: masked environment for programs", () => {
+  it("publishes fakes under stable names and never the originals", () => {
+    const vault = new CredentialVault();
+    maskText("key sk-proj-AbCdEf0123456789AbCdEf0123456789AbCdEf0123456789", options(), vault);
+    maskText("mail emily.carter@example.com", options(), vault);
+    const published = maskedEnvironment(vault.entries());
+    assert.deepEqual(
+      published.map((entry) => entry.name),
+      ["CODEITLAB_MASKED_API_KEY_1", "CODEITLAB_MASKED_EMAIL_1"],
+    );
+    const record = maskedEnvironmentRecord(published);
+    assert.notInclude(JSON.stringify(record), "sk-proj-AbCdEf0123456789");
+    assert.notInclude(JSON.stringify(record), "emily.carter@example.com");
+    assert.match(record["CODEITLAB_MASKED_API_KEY_1"] ?? "", /^sk-proj-/);
+  });
+
+  it("is empty when nothing was masked", () => {
+    assert.deepEqual(maskedEnvironment(new CredentialVault().entries()), []);
   });
 });

@@ -17,6 +17,8 @@ import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
 
+import { CredentialsService as CredentialsServiceTag } from "@codeitlab/core/services";
+
 import * as ServerSettings from "../serverSettings.ts";
 import * as TerminalManager from "../terminal/Manager.ts";
 import * as ProjectService from "./ProjectService.ts";
@@ -186,6 +188,9 @@ export const make = Effect.gen(function* () {
   const terminalManager = yield* TerminalManager.TerminalManager;
   const serverSettings = yield* ServerSettings.ServerSettingsService;
   const crypto = yield* Crypto.Crypto;
+  // Optional so the runner still works in builds and tests without the
+  // credentials service; without it a program simply gets no masked values.
+  const credentials = yield* Effect.serviceOption(CredentialsServiceTag);
   const completionShell = resolveCompletionShell(
     yield* HostProcess.Platform,
     yield* HostProcess.Environment,
@@ -363,6 +368,11 @@ export const make = Effect.gen(function* () {
       // Setup can run before a client attaches. Truecolor probes in tools such
       // as Vite+ wait for terminal replies that nobody can send at that point.
       COLORTERM: "",
+      // The program sees CODEITLAB_MASKED_* fakes, never the real values that
+      // the app is holding on the user's behalf.
+      ...(Option.isSome(credentials)
+        ? yield* credentials.value.programEnvironment.pipe(Effect.orElseSucceed(() => ({})))
+        : {}),
     };
     const observe = input.observeCompletion;
     const completionToken = observe

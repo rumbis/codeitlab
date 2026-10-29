@@ -28,6 +28,12 @@ export interface CredentialsEngineOptions {
   model?: CredentialsModel;
   /** Score at or above which the model's candidate is treated as a secret. */
   modelThreshold?: number;
+  /**
+   * Words the user declared private — their address book, a client name, a
+   * project that must not be named. Matched case-insensitively, whole-word, and
+   * masked in every mode, exactly like a password.
+   */
+  keywords?: ReadonlyArray<string>;
 }
 
 export interface CredentialsModel {
@@ -49,7 +55,7 @@ interface Span {
   start: number;
   end: number;
   kind: CodeItLabCredentialsFindingKind;
-  source: "pattern" | "model" | "tag";
+  source: "pattern" | "keyword" | "model" | "tag";
 }
 
 const BASE62 = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
@@ -241,6 +247,8 @@ export function createFake(
       return `10.${stream() % 256}.${stream() % 256}.${stream() % 256}`;
     case "private-block":
       return `[private:${randomString(stream, "0123456789abcdef", 8)}]`;
+    case "keyword":
+      return `kw_${randomString(stream, "abcdefghijklmnopqrstuvwxyz0123456789", Math.max(value.length, 6))}`;
     case "model-detected":
       return randomString(stream, ALNUM, Math.max(value.length, 12));
   }
@@ -322,6 +330,12 @@ interface PatternRule {
   modes?: ReadonlyArray<CodeItLabCredentialsMode>;
   /** Personal data, switched off unless `maskPersonalData` is on. */
   personal?: boolean;
+  /**
+   * Never skipped. An email address and a password are the two things a user
+   * cannot un-mask by choosing a narrower mode: they identify a person and they
+   * grant access, so "secrets" mode still hides them.
+   */
+  always?: boolean;
   /** Value-level validation (checksums, shapes). */
   validate?: (value: string) => boolean;
 }
@@ -390,8 +404,9 @@ const PATTERN_RULES: ReadonlyArray<PatternRule> = [
   {
     kind: "email",
     regex: /\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b/g,
-    modes: PERSONAL_MODES,
-    personal: true,
+    // An address names a person. Personal data is masked as a set, so this one
+    // rule ignores both the mode and the personal switch.
+    always: true,
   },
   {
     kind: "phone",
@@ -486,8 +501,10 @@ function collectPatternSpans(
 ): Span[] {
   const spans: Span[] = [];
   for (const rule of PATTERN_RULES) {
-    if (rule.modes && !rule.modes.includes(mode)) continue;
-    if (!maskPersonal && rule.personal === true) continue;
+    if (rule.always !== true) {
+      if (rule.modes && !rule.modes.includes(mode)) continue;
+      if (!maskPersonal && rule.personal === true) continue;
+    }
     const regex = new RegExp(rule.regex.source, rule.regex.flags);
     let match: RegExpExecArray | null;
     while ((match = regex.exec(text)) !== null) {
@@ -502,6 +519,40 @@ function collectPatternSpans(
       const offset = group === 0 ? 0 : match[0].indexOf(value);
       const start = match.index + Math.max(offset, 0);
       spans.push({ start, end: start + value.length, kind: rule.kind, source: "pattern" });
+    }
+  }
+  return mergeSpans(spans);
+}
+
+function escapeRegex(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+/**
+ * User-declared private words. Word boundaries are applied only when the word
+ * starts and ends with a word character, so a keyword like "sk-ant-" or
+ * "@acme" still matches where a boundary would never exist.
+ */
+function collectKeywordSpans(text: string, keywords: ReadonlyArray<string>): Span[] {
+  const spans: Span[] = [];
+  for (const keyword of keywords) {
+    const word = keyword.trim();
+    if (word.length < 2) continue;
+    const leading = /^\w/.test(word) ? "\\b" : "";
+    const trailing = /\w$/.test(word) ? "\\b" : "";
+    const regex = new RegExp(`${leading}${escapeRegex(word)}${trailing}`, "gi");
+    let match: RegExpExecArray | null;
+    while ((match = regex.exec(text)) !== null) {
+      if (match[0].length === 0) {
+        regex.lastIndex += 1;
+        continue;
+      }
+      spans.push({
+        start: match.index,
+        end: match.index + match[0].length,
+        kind: "keyword",
+        source: "keyword",
+      });
     }
   }
   return mergeSpans(spans);
@@ -538,9 +589,10 @@ export function maskText(
   }
   const privateResult = collectPrivateSpans(text);
   const patternSpans = collectPatternSpans(text, options.mode, options.maskPersonalData);
+  const keywordSpans = collectKeywordSpans(text, options.keywords ?? []);
 
   const accepted: Span[] = [...privateResult.spans];
-  for (const span of patternSpans) {
+  for (const span of [...keywordSpans, ...patternSpans]) {
     if (accepted.some((existing) => overlaps(existing, span))) continue;
     accepted.push(span);
   }
@@ -620,3 +672,52 @@ export function maskValue(
 }
 
 export const CREDENTIALS_ENGINE_VERSION = "1.0.0";
+
+/** A masked value published to a program: the safe value, and the name it gets. */
+export interface MaskedEnvironmentEntry {
+  readonly name: string;
+  readonly value: string;
+  readonly kind: CodeItLabCredentialsFindingKind;
+}
+
+const ENV_NAME_PREFIX = "CODEITLAB_MASKED_";
+
+/** Turn a finding kind into a stable, valid environment variable name. */
+function environmentName(kind: CodeItLabCredentialsFindingKind, index: number): string {
+  const suffix = kind.toUpperCase().replace(/[^A-Z0-9]+/g, "_");
+  return ENV_NAME_PREFIX + suffix + "_" + index;
+}
+
+/**
+ * The fakes a program under the app is allowed to see.
+ *
+ * The point is that a build script or a dev server can still be handed "the
+ * database URL" or "the API key" without ever receiving the real one: the
+ * program reads CODEITLAB_MASKED_..., and the only thing that knows the
+ * mapping is this process. Nothing here is ever written to disk by the caller.
+ */
+export function maskedEnvironment(
+  entries: ReadonlyArray<VaultEntry>,
+): ReadonlyArray<MaskedEnvironmentEntry> {
+  const counters = new Map<CodeItLabCredentialsFindingKind, number>();
+  const published: Array<MaskedEnvironmentEntry> = [];
+  for (const entry of entries) {
+    const index = (counters.get(entry.kind) ?? 0) + 1;
+    counters.set(entry.kind, index);
+    published.push({
+      name: environmentName(entry.kind, index),
+      value: entry.fake,
+      kind: entry.kind,
+    });
+  }
+  return published;
+}
+
+/** The key=value pairs to merge into a spawned program's environment. */
+export function maskedEnvironmentRecord(
+  published: ReadonlyArray<MaskedEnvironmentEntry>,
+): Record<string, string> {
+  const record: Record<string, string> = {};
+  for (const entry of published) record[entry.name] = entry.value;
+  return record;
+}

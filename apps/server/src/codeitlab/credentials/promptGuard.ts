@@ -47,6 +47,7 @@ export function guardProviderPrompt(
       maskPersonalData: settings.maskPersonalData,
       fakeKey: APP_TURN_FAKE_KEY,
       model: bundledCredentialModel(),
+      keywords: settings.keywords,
     },
     appTurnVault,
   );

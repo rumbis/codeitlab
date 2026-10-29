@@ -277,6 +277,15 @@ export class CredentialsService extends Context.Service<
     readonly stop: Effect.Effect<CodeItLabCredentialsStatus, CodeItLabServiceError>;
     /** Fetch the newest tiny model into the CodeItLab home. */
     readonly downloadModel: Effect.Effect<CodeItLabCredentialsModel, CodeItLabServiceError>;
+    /**
+     * The masked environment a program started by the app inherits. Real values
+     * never leave this process: each entry carries the fake, and only the vault
+     * can put the original back. Empty when the user turned this off.
+     */
+    readonly programEnvironment: Effect.Effect<
+      Readonly<Record<string, string>>,
+      CodeItLabServiceError
+    >;
   }
 >()("@codeitlab/core/services/CredentialsService") {}
 

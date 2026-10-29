@@ -1,3 +1,4 @@
+import { emptyProfile } from "@codeitlab/core/profile";
 import { describe, expect, it, vi } from "vite-plus/test";
 import { userEvent } from "vite-plus/test/browser";
 
@@ -13,6 +14,17 @@ const mock = vi.hoisted(() => ({
   boardTasks: [] as ReadonlyArray<{ title: string; notes: string; archivedAt?: string }>,
   remoteSource: "local" as "local" | "server",
   remoteTasks: [] as ReadonlyArray<{ title: string; notes: string; archivedAt?: string }>,
+  // Hoisted factories cannot call imports, so the blank profile is spelled out
+  // here and overwritten by setupProfile() in the tests that care.
+  profile: {
+    fullName: "",
+    headline: "",
+    location: "",
+    interestDomain: "",
+    skillset: "",
+    workHistory: [],
+    visibleToBusinesses: false,
+  } as Record<string, unknown>,
 }));
 
 const questBoard = {
@@ -68,7 +80,7 @@ vi.mock(import("../../codeitlab/api"), async (original) => ({
 vi.mock(import("../../codeitlab/effectsSettings"), async (original) => ({
   ...(await original()),
   useCodeItLabSettingsWriter: (() => ({
-    codeitlab: { board: { tasks: mock.boardTasks } },
+    codeitlab: { board: { tasks: mock.boardTasks }, profile: mock.profile },
     environmentId: "local",
     update: (patch: { board: { tasks: ReadonlyArray<{ title: string; notes: string }> } }) => {
       mock.updates.push(patch);
@@ -76,6 +88,10 @@ vi.mock(import("../../codeitlab/effectsSettings"), async (original) => ({
     },
   })) as never,
 }));
+
+function setupProfile(overrides: Record<string, unknown> = {}) {
+  mock.profile = { ...emptyProfile(), ...overrides } as unknown as Record<string, unknown>;
+}
 
 describe("CodeItLabOverviewPage quests", () => {
   it("keeps changing counts from jittering", async () => {
@@ -190,5 +206,41 @@ describe("CodeItLabOverviewPage quests", () => {
     expect(document.activeElement).toBe(button);
     await userEvent.keyboard("{Enter}");
     await vi.waitFor(() => expect(mock.upserts).toHaveLength(1));
+  });
+});
+
+describe("CodeItLabOverviewPage work", () => {
+  it("puts work on the home screen and asks for the profile", async () => {
+    setupProfile();
+    await using screen = await renderUi(<CodeItLabOverviewPage />);
+    const card = screen.container.querySelector("[data-codeitlab-work]");
+    expect(card).not.toBeNull();
+    expect(card!.textContent).toContain("Get on the work board");
+    expect(card!.textContent).toContain("0/3 steps");
+    expect(card!.textContent).toContain("Private until you switch on showing it to businesses.");
+  });
+
+  it("counts the steps as they are filled in", async () => {
+    setupProfile({ fullName: "Maria", headline: "Backend engineer" });
+    await using screen = await renderUi(<CodeItLabOverviewPage />);
+    const card = screen.container.querySelector("[data-codeitlab-work]");
+    expect(card!.textContent).toContain("1/3 steps");
+    expect(card!.textContent).toContain("Build your profile");
+  });
+
+  it("says the profile is ready once all three steps are done", async () => {
+    setupProfile({
+      fullName: "Maria",
+      headline: "Backend engineer",
+      interestDomain: "Local-first tools",
+      workHistory: [{ company: "Acme", role: "Backend", period: "", summary: "" }],
+      visibleToBusinesses: true,
+    });
+    await using screen = await renderUi(<CodeItLabOverviewPage />);
+    const card = screen.container.querySelector("[data-codeitlab-work]");
+    expect(card!.textContent).toContain("3/3 steps");
+    expect(card!.textContent).toContain("Your profile is ready for businesses");
+    expect(card!.textContent).toContain("Shown to businesses on our site.");
+    expect(card!.querySelector("a")?.getAttribute("href")).toBe("/settings/codeitlab/profile");
   });
 });

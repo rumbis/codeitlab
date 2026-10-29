@@ -16,6 +16,8 @@ import {
   TerminalSquareIcon,
 } from "lucide-react";
 
+import { profileIsComplete, profileSteps } from "@codeitlab/core/profile";
+
 import { questBoardTask, settingsBoardTasks } from "../../codeitlab/board";
 import { resolveMarketplaceUrl } from "../../codeitlab/marketplaceUrl";
 import { useCodeItLabSettingsWriter } from "../../codeitlab/effectsSettings";
@@ -90,6 +92,8 @@ export function CodeItLabOverviewPage() {
   const quests = useCodeItLabQuests();
   const board = useCodeItLabTasks();
   const { codeitlab, update } = useCodeItLabSettingsWriter();
+  const workSteps = profileSteps(codeitlab.profile);
+  const profileDone = profileIsComplete(codeitlab.profile);
   const refreshNexus = useCodeItLabNexusRefresh();
   const [refreshing, setRefreshing] = useState(false);
   const [refreshMessage, setRefreshMessage] = useState<string | null>(null);
@@ -249,6 +253,61 @@ export function CodeItLabOverviewPage() {
               ))}
             </ul>
           </details>
+        </div>
+      </CodeItLabCard>
+      <CodeItLabCard data-codeitlab-work>
+        <div className="flex flex-col gap-4 p-4">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <p className="codeitlab-mono-label text-codeitlab-green/80">YOUR WORK</p>
+              <h3 className="mt-1 font-display text-lg font-semibold text-foreground">
+                {profileDone ? "Your profile is ready for businesses" : "Get on the work board"}
+              </h3>
+              <p className="mt-1 max-w-2xl text-sm text-muted-foreground">
+                {profileDone
+                  ? "Businesses can see who you are and what you have done. Keep it current as the work changes."
+                  : "Say who you are, add the work you have done, and declare what interests you. Then a business on our site can find you instead of the other way round."}
+              </p>
+            </div>
+            <Badge size="sm" variant="outline">
+              {workSteps.filter((step) => step.done).length}/{workSteps.length} steps
+            </Badge>
+          </div>
+          <ol className="flex flex-col gap-2">
+            {workSteps.map((step, index) => (
+              <li
+                className="flex items-center gap-3 rounded-lg border border-border/60 bg-background/40 p-3"
+                key={step.id}
+              >
+                <span
+                  aria-hidden
+                  className="flex size-5 shrink-0 items-center justify-center rounded-full border border-border text-2xs text-muted-foreground"
+                >
+                  {step.done ? "✓" : index + 1}
+                </span>
+                <span
+                  className={
+                    step.done
+                      ? "min-w-0 text-sm text-muted-foreground line-through"
+                      : "min-w-0 text-sm text-foreground"
+                  }
+                >
+                  {step.label}
+                </span>
+              </li>
+            ))}
+          </ol>
+          <div className="flex flex-wrap items-center gap-2">
+            <Button render={<Link to="/settings/codeitlab/profile" />} size="sm">
+              {profileDone ? "Review your profile" : "Build your profile"}
+              <ArrowRightIcon className="size-3.5" />
+            </Button>
+            <p className="text-2xs text-muted-foreground">
+              {codeitlab.profile.visibleToBusinesses
+                ? "Shown to businesses on our site."
+                : "Private until you switch on showing it to businesses."}
+            </p>
+          </div>
         </div>
       </CodeItLabCard>
       <CodeItLabSectionHeading

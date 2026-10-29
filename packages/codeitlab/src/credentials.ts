@@ -67,12 +67,29 @@ export const CodeItLabCredentialsSettings = Schema.Struct({
     Schema.withDecodingDefault(Effect.succeed("mask" as const)),
   ),
   /**
-   * Personal data is masked by default: emails, phone numbers, IBANs and card
-   * numbers are replaced before they leave, and the real values are restored in
-   * the output, so fixtures and migrations keep the addresses the user wrote.
-   * Turn it off when a task needs the raw values to reason about them.
+   * Personal data is masked by default: phone numbers, IBANs and card numbers
+   * are replaced before they leave, and the real values are restored in the
+   * output, so fixtures and migrations keep what the user wrote. Turn it off
+   * when a task needs the raw values to reason about them.
+   *
+   * Email addresses are not covered by this switch: they name a person, so they
+   * are masked in every mode.
    */
   maskPersonalData: BooleanDefault(true),
+  /**
+   * Words the user declares private: a client name, a home address, a project
+   * that must not be named to a model. Each one is masked wherever it appears,
+   * in every mode, the same way a password is. The values never leave the
+   * machine — they are matched locally and restored locally.
+   */
+  keywords: Schema.Array(Schema.String).pipe(Schema.withDecodingDefault(Effect.succeed([]))),
+  /**
+   * Publish the masked values to programs as environment variables, so a build
+   * or a script that needs "the database URL" can read `CODEITLAB_MASKED_…`
+   * instead of the real one. A program under the app therefore never holds the
+   * secret itself.
+   */
+  exposeKeywordsToPrograms: BooleanDefault(true),
   /** Mask the originals back into answers and tool output before they reach disk or the UI. */
   restoreResponses: BooleanDefault(true),
   /** Refuse a request the local model flags as sensitive but the detectors cannot classify. */
@@ -122,12 +139,18 @@ export const CodeItLabCredentialsFindingKind = Schema.Literals([
   "card",
   "ip",
   "private-block",
+  "keyword",
   "model-detected",
 ]);
 export type CodeItLabCredentialsFindingKind = typeof CodeItLabCredentialsFindingKind.Type;
 
-/** Where a finding came from: a pattern, the local model, or a `/private` tag. */
-export const CodeItLabCredentialsFindingSource = Schema.Literals(["pattern", "model", "tag"]);
+/** Where a finding came from: a pattern, a declared keyword, the local model, or a `/private` tag. */
+export const CodeItLabCredentialsFindingSource = Schema.Literals([
+  "pattern",
+  "keyword",
+  "model",
+  "tag",
+]);
 export type CodeItLabCredentialsFindingSource = typeof CodeItLabCredentialsFindingSource.Type;
 
 /**
@@ -236,6 +259,7 @@ export const CREDENTIALS_FINDING_LABELS: Record<CodeItLabCredentialsFindingKind,
   card: "Card number",
   ip: "Private IP address",
   "private-block": "/private block",
+  keyword: "Keyword",
   "model-detected": "Local model match",
 };
 

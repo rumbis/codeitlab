@@ -53,6 +53,7 @@ const FINDING_LABELS: Record<CodeItLabCredentialsFindingKind, string> = {
   card: "Card",
   ip: "Private IP",
   "private-block": "/private block",
+  keyword: "Keyword",
   "model-detected": "Local model",
 };
 
@@ -295,6 +296,57 @@ export function CodeItLabCredentialsPage() {
               </div>
             </CodeItLabCard>
           </div>
+
+          <CodeItLabCard data-credentials-keywords>
+            <div className="space-y-3 px-4 pt-4 pb-4">
+              <div>
+                <h3 className="font-display text-sm font-semibold text-foreground">
+                  Your own keywords
+                </h3>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  Words that must never reach a provider, whatever the mode and whatever the pattern
+                  rules think: an internal project name, a client, a domain of your own. Matching
+                  ignores case and masks every occurrence.
+                </p>
+              </div>
+              <div className="space-y-1.5">
+                <label
+                  className="codeitlab-mono-label text-muted-foreground"
+                  htmlFor="credentials-keywords"
+                >
+                  One per line
+                </label>
+                <Textarea
+                  id="credentials-keywords"
+                  onChange={(event) =>
+                    patch({
+                      keywords: event.currentTarget.value
+                        .split("\n")
+                        .map((line) => line.trim())
+                        .filter((line) => line !== ""),
+                    })
+                  }
+                  placeholder="acme-internal"
+                  rows={3}
+                  value={(draft.keywords ?? []).join("\n")}
+                />
+              </div>
+              <label className="flex items-center justify-between gap-3 text-xs text-muted-foreground">
+                <span>
+                  Hand masked values to programs as environment variables
+                  <span className="mt-1 block text-2xs">
+                    Values stay on this machine as
+                    <code className="mx-1 font-mono text-2xs">CODEITLAB_MASKED_*</code>
+                    variables, so a script under the app keeps working without seeing the real ones.
+                  </span>
+                </span>
+                <Switch
+                  checked={draft.exposeKeywordsToPrograms}
+                  onCheckedChange={(checked) => patch({ exposeKeywordsToPrograms: checked })}
+                />
+              </label>
+            </div>
+          </CodeItLabCard>
 
           <CodeItLabCard data-credentials-gateway>
             <div className="flex flex-wrap items-center justify-between gap-2 px-4 pt-4">

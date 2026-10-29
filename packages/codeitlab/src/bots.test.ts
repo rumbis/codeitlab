@@ -2,6 +2,7 @@ import { describe, expect, it } from "vite-plus/test";
 import * as Schema from "effect/Schema";
 
 import { CodeItLabBotsSettings, buildBotBrief, botIssue, type CodeItLabBot } from "./bots.ts";
+import { emptyProfile } from "./profile.ts";
 
 const decode = Schema.decodeSync(CodeItLabBotsSettings);
 
@@ -43,6 +44,7 @@ describe("bots", () => {
 
   it("adds the declared profile as labelled context when one is given", () => {
     const brief = buildBotBrief(bot({}), "hi", {
+      ...emptyProfile(),
       interestDomain: "Local-first tools",
       skillset: "TypeScript",
     });
@@ -52,7 +54,7 @@ describe("bots", () => {
   });
 
   it("leaves the brief unchanged for an empty profile", () => {
-    const withEmpty = buildBotBrief(bot({}), "hi", { interestDomain: "", skillset: "" });
+    const withEmpty = buildBotBrief(bot({}), "hi", emptyProfile());
     expect(withEmpty).toBe(buildBotBrief(bot({}), "hi"));
   });
 });
