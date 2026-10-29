@@ -18,8 +18,9 @@ const localMarketplaceUrl = import.meta.env.LOCAL_MARKETPLACE_URL ?? "http://127
       <h1 class="display">Download the app. Find a studio. Talk to it.</h1>
       <p class="local-sub">
         Everything below talks to the marketplace server on
-        <code>{localMarketplaceUrl}</code>. Start it with
-        <code>node apps/marketplace/src/server/main.ts</code>, then use this page.
+        <code>{localMarketplaceUrl}</code>. Start both servers with
+        <code>node --experimental-strip-types apps/marketplace/scripts/local-demo.ts --seed</code>,
+        then use this page.
       </p>
       <div class="local-actions">
         <a class="btn btn-primary btn-lg" href="/download">Download CodeItLab</a>
