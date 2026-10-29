@@ -16,7 +16,12 @@ import { Input } from "../ui/input";
 import { Switch } from "../ui/switch";
 import { Textarea } from "../ui/textarea";
 import { toastManager } from "../ui/toast";
-import { CodeItLabCard, CodeItLabEmptyBlock, CodeItLabSectionHeading } from "./CodeItLabPrimitives";
+import {
+  CodeItLabCard,
+  CodeItLabEmptyBlock,
+  CodeItLabPrimaryCard,
+  CodeItLabSectionHeading,
+} from "./CodeItLabPrimitives";
 
 /** The comma-separated fields a person typed, as the list the marketplace stores. */
 function splitList(value: string): string[] {
@@ -320,7 +325,7 @@ export function CodeItLabProfilePage() {
         </div>
       </CodeItLabCard>
 
-      <CodeItLabCard className="flex flex-col gap-3 p-4">
+      <CodeItLabPrimaryCard className="flex flex-col gap-3 p-4">
         <div className="flex items-center justify-between gap-3">
           <span className="flex flex-col gap-1">
             <span className="text-sm font-medium">Show my profile to businesses</span>
@@ -367,7 +372,7 @@ export function CodeItLabProfilePage() {
             </div>
           </div>
         )}
-      </CodeItLabCard>
+      </CodeItLabPrimaryCard>
     </div>
   );
 }

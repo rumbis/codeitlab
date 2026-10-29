@@ -46,6 +46,7 @@ import { IntegrationMark } from "./IntegrationMarks";
 import { useCodeItLabEffectsSettings } from "../../codeitlab/effectsSettings";
 import {
   CodeItLabCard,
+  CodeItLabPrimaryCard,
   CodeItLabSectionHeading,
   CodeItLabSourceNote,
   CodeItLabStat,
@@ -255,7 +256,7 @@ export function CodeItLabOverviewPage() {
           </details>
         </div>
       </CodeItLabCard>
-      <CodeItLabCard data-codeitlab-work>
+      <CodeItLabPrimaryCard data-codeitlab-work>
         <div className="flex flex-col gap-4 p-4">
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div>
@@ -309,7 +310,7 @@ export function CodeItLabOverviewPage() {
             </p>
           </div>
         </div>
-      </CodeItLabCard>
+      </CodeItLabPrimaryCard>
       <CodeItLabSectionHeading
         eyebrow="Status"
         title="Everything the harness knows about itself"

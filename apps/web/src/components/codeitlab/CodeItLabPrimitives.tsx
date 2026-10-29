@@ -121,6 +121,23 @@ export function CodeItLabToggleGroup<T extends string | number>({
   );
 }
 
+/**
+ * The one card a screen is actually about. Placement already puts it first, and
+ * the green edge carries that emphasis for anyone scanning colour rather than
+ * reading: on a wall of neutral cards, the tinted border is what the eye finds.
+ * Everything else stays a plain CodeItLabCard so the contrast keeps meaning.
+ */
+export function CodeItLabPrimaryCard({ className, children, ...props }: ComponentProps<"div">) {
+  return (
+    <CodeItLabCard
+      className={cn("border-codeitlab-green/40 bg-codeitlab-green/5", className)}
+      {...props}
+    >
+      {children}
+    </CodeItLabCard>
+  );
+}
+
 export function CodeItLabCard({ className, children, ...props }: ComponentProps<"div">) {
   return (
     <div

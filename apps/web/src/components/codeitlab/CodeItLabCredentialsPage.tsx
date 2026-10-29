@@ -29,6 +29,7 @@ import { playCodeItLabSfx, unlockCodeItLabAudio } from "../../codeitlab/audio";
 import { FIREWALL_UPSTREAMS, firewallUpstreamUrl } from "../../codeitlab/upstreamUrl";
 import {
   CodeItLabCard,
+  CodeItLabPrimaryCard,
   CodeItLabLoadingRows,
   CodeItLabSectionHeading,
   CodeItLabSourceNote,
@@ -196,7 +197,7 @@ export function CodeItLabCredentialsPage() {
       ) : (
         <>
           <div className="grid gap-3 lg:grid-cols-2">
-            <CodeItLabCard data-credentials-switch>
+            <CodeItLabPrimaryCard data-credentials-switch>
               <div className="flex items-start justify-between gap-3 px-4 pt-4">
                 <div className="flex items-center gap-2">
                   <ShieldCheckIcon className="size-4 text-codeitlab-green" />
@@ -243,7 +244,7 @@ export function CodeItLabCredentialsPage() {
                   restore switch covers the loopback gateway and CLI agents that use it.
                 </p>
               </div>
-            </CodeItLabCard>
+            </CodeItLabPrimaryCard>
 
             <CodeItLabCard data-credentials-mode>
               <div className="space-y-3 px-4 pt-4 pb-4">
