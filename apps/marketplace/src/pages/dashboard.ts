@@ -51,7 +51,7 @@ import {
 } from "./components.ts";
 import { engagementPanel } from "./engagement.ts";
 import { escapeHtml } from "./escape.ts";
-import { flashFrom, layout, pageUrl } from "./layout.ts";
+import { appDownloadUrl, flashFrom, layout, pageUrl } from "./layout.ts";
 
 const AVAILABILITY_CHOICES = (Object.keys(AVAILABILITY_LABELS) as Availability[]).map((value) => ({
   value,
@@ -721,6 +721,7 @@ export function renderDashboard(
           <p class="eyebrow">Coder dashboard</p>
           <h1>${escapeHtml(account.email)}</h1>
           <p class="lead">Keep your profile current: it drives your match score and what businesses see.</p>
+          <p><a class="button" href="${escapeHtml(appDownloadUrl)}">Open the work in the app</a></p>
         </section>
         ${questsSection(ctx, account)}
         ${activitySection(ctx, account)}
@@ -740,6 +741,7 @@ export function renderDashboard(
           <p class="eyebrow">Business dashboard</p>
           <h1>${escapeHtml(account.email)}</h1>
           <p class="lead">Post the brief, compare ranked coders, fund escrow, approve the delivery.</p>
+          <p><a class="button" href="${escapeHtml(appDownloadUrl)}">Open the work in the app</a></p>
         </section>
         ${questsSection(ctx, account)}
         ${activitySection(ctx, account)}

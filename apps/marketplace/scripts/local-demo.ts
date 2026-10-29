@@ -23,6 +23,7 @@ const MARKETPLACE_PORT = 4180;
 const MARKETING_PORT = 4173;
 const DB_PATH = process.env.MARKETPLACE_DB ?? "/tmp/mkt-local.sqlite";
 const ORIGIN = "http://127.0.0.1:" + MARKETING_PORT;
+const MARKET_URL = "http://127.0.0.1:" + MARKETPLACE_PORT + "/market";
 
 const children: NodeChildProcess.ChildProcess[] = [];
 const start = (
@@ -72,6 +73,11 @@ const marketplace = start("marketplace", process.execPath, ["src/server/main.ts"
   MARKETPLACE_DB: DB_PATH,
   MARKETPLACE_BASE_PATH: "/market",
   MARKETPLACE_TRUSTED_ORIGINS: ORIGIN,
+  // "Get the app" must land on the download page of the site in this same run,
+  // not on the marketplace itself: sending it to MARKET_URL made the button
+  // reload the page you were already reading. The app binary is not built by
+  // this launcher, so /download is the honest destination.
+  MARKETPLACE_APP_URL: ORIGIN + "/download",
 });
 
 const waitForMarketplace = async () => {
@@ -116,7 +122,11 @@ const main = async () => {
       const seeding = NodeChildProcess.spawn(
         process.execPath,
         ["scripts/seed-local.ts", "--force"],
-        { cwd: marketplaceDir, env: { ...process.env, MARKETPLACE_DB: DB_PATH }, stdio: "inherit" },
+        {
+          cwd: marketplaceDir,
+          env: { ...process.env, MARKETPLACE_DB: DB_PATH },
+          stdio: "inherit",
+        },
       );
       seeding.on("exit", (code) => (code === 0 ? resolve() : reject(new Error("seed failed"))));
     });
@@ -127,13 +137,22 @@ const main = async () => {
     ["astro", "dev", "--host", "127.0.0.1", "--port", String(MARKETING_PORT)],
     marketingDir,
     {
-      LOCAL_MARKETPLACE_URL: "http://127.0.0.1:" + MARKETPLACE_PORT + "/market",
+      // The site must link to the marketplace running beside it, or every nav
+      // link would send the browser to production mid-demo. The app keeps its
+      // own default unless APP_URL is set, because this launcher does not serve
+      // the app: pointing "get the free app" at a port nothing listens on would
+      // be a worse lie than pointing it at the real deployment.
+      LOCAL_MARKETPLACE_URL: MARKET_URL,
+      MARKETPLACE_URL: MARKET_URL,
+      MARKETPLACE_APP_URL: ORIGIN + "/download",
+      ...(process.env.APP_URL === undefined ? {} : { APP_URL: process.env.APP_URL }),
     },
   );
   console.log("");
   console.log("  Local website  " + ORIGIN + "/local");
   console.log("  Marketplace    http://127.0.0.1:" + MARKETPLACE_PORT + "/market");
   console.log("  Database       " + DB_PATH);
+  console.log("  App            " + (process.env.APP_URL ?? "https://app.codeitlab.com"));
   console.log("");
   console.log("  Login codes appear here as [marketplace] login code for ...");
   console.log("  Stop everything with Ctrl-C.");

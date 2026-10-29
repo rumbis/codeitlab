@@ -239,6 +239,16 @@ function requireAccount(session: AuthSession | null): AccountRow {
   return session.account;
 }
 
+/**
+ * Pages that show one account's own position, so they need a signed-in user.
+ *
+ * The directory, the job board and the published numbers stay public on
+ * purpose: an anonymous visitor has to be able to judge the marketplace before
+ * making an account, and /numbers exists because trust is easier to check than
+ * to promise.
+ */
+const REQUIRES_ACCOUNT: ReadonlySet<string> = new Set(["/dashboard"]);
+
 interface EngagementListItem extends Engagement {
   /** Which side of the engagement the requesting account is on. */
   readonly role: MessageAuthorRole;
@@ -809,7 +819,10 @@ export function createApp(options: CreateAppOptions): AppHandler {
               : "Job reopened. It is listed again and accepts applications.",
         });
       }
-      if (segments[3] === "interests") {
+      // "interests" is the form field on the job page; "apply" is what the app
+      // calls it. Same record, two names, so neither surface has to know the
+      // other's vocabulary.
+      if (segments[3] === "interests" || segments[3] === "apply") {
         if (method === "POST") {
           const account = requireAccount(session);
           const interest = addInterest(context, account, jobId, parsed.data);
@@ -1572,6 +1585,18 @@ export function createApp(options: CreateAppOptions): AppHandler {
     }
 
     if (!isGet) throw new HttpError(405, "method_not_allowed", "Use GET.");
+
+    // The free app and the way into an account are public; everything else is
+    // for signed-in users. A signed-in account lands on the dashboard, which is
+    // where the work it came for lives.
+    if (session === null && REQUIRES_ACCOUNT.has(path)) {
+      // Carry where they were headed so the login form can resume it, instead of
+      // dropping everyone on the dashboard after signing in.
+      const target = path + url.search;
+      return redirectResponse(
+        pageUrl(context.basePath, "/login") + "?redirectTo=" + encodeURIComponent(target),
+      );
+    }
 
     if (path === "/") return htmlResponse(renderHome(context, session?.account ?? null, url));
     if (path === "/coders")

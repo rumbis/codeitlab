@@ -3,7 +3,7 @@ import { listOpenJobs } from "../server/jobs.ts";
 import type { AccountRow } from "../server/types.ts";
 import { emptyState, jobCard } from "./components.ts";
 import { escapeHtml } from "./escape.ts";
-import { flashFrom, layout, pageUrl } from "./layout.ts";
+import { appDownloadUrl, flashFrom, layout, pageUrl } from "./layout.ts";
 
 export function renderHome(ctx: AppContext, account: AccountRow | null, url: URL): string {
   const jobs = listOpenJobs(ctx, 3);
@@ -20,13 +20,12 @@ export function renderHome(ctx: AppContext, account: AccountRow | null, url: URL
   const content = `<section class="hero">
     <p class="eyebrow">The CodeItLab marketplace</p>
     <h1>Get paid for the work you already ship.</h1>
-    <p class="lead">CodeItLab users say they want paid work. Businesses describe the job, the marketplace ranks coders by real fit, and the money sits in escrow until the work is approved.</p>
+    <p class="lead">CodeItLab users say they want paid work. Businesses describe the job, the marketplace ranks coders by real fit, and the money sits in escrow until the work is approved. Browse and join here; the work itself lives in the app.</p>
     <div class="actions">
       <a class="button" href="${escapeHtml(pageUrl(ctx.basePath, "/join?role=coder"))}">Find paid work</a>
       <a class="button button-secondary" href="${escapeHtml(pageUrl(ctx.basePath, "/join?role=business"))}">Hire a coder</a>
-      <a class="button button-ghost" href="${escapeHtml(pageUrl(ctx.basePath, "/jobs"))}">Browse jobs</a>
-      <a class="button button-ghost" href="${escapeHtml(pageUrl(ctx.basePath, "/how-it-works"))}">How it works</a>
     </div>
+    <p class="hero-note">Interests, jobs and project conversations live in the app, so you can follow work without keeping a browser tab open. <a href="${escapeHtml(pageUrl(ctx.basePath, "/jobs"))}">Browse jobs</a> or read <a href="${escapeHtml(pageUrl(ctx.basePath, "/how-it-works"))}">how it works</a> first, then <a href="${escapeHtml(appDownloadUrl)}">get the app</a> to pick the work up.</p>
   </section>
 
   <section class="stack">

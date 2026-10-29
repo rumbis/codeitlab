@@ -14,6 +14,12 @@ export interface LayoutOptions {
   readonly canonicalPath?: string;
 }
 
+// Where "Get the app" sends people. The marketplace has no build of its own to
+// hand out, so this is the public download page, overridable for a local run.
+// Exported because every page that finishes a task here should hand the user
+// the app next: the work continues there, not in the browser.
+export const appDownloadUrl = process.env.MARKETPLACE_APP_URL ?? "https://codeitlab.com/download";
+
 /** The only way pages build an app-internal URL. */
 export function pageUrl(basePath: string, path: string): string {
   return withBasePath(basePath, path);
@@ -37,10 +43,13 @@ export function layout(options: LayoutOptions & { readonly currentPath?: string 
       ? `<link rel="canonical" href="${escapeHtml(`${options.baseUrl}${options.canonicalPath}`)}">`
       : "";
 
+  // The app is the unit of movement: it is the only primary call to action, and
+  // every marketplace page sends an anonymous visitor there before asking them
+  // to join. Signed-in links stay hidden until there is an account to show.
   const accountNav =
     account === null
-      ? `${navLink(basePath, "/login", "Log in", currentPath)}
-         <a class="nav-cta" href="${escapeHtml(pageUrl(basePath, "/join"))}">Join</a>`
+      ? `<a class="nav-cta" href="${escapeHtml(appDownloadUrl)}">Get the app</a>
+         ${navLink(basePath, "/login", "Log in", currentPath)}`
       : `${navLink(basePath, "/dashboard", "Dashboard", currentPath)}
          <span class="nav-account">${escapeHtml(account.email)}</span>
          <form class="inline-form" method="post" action="${escapeHtml(pageUrl(basePath, "/api/auth/logout"))}">

@@ -46,8 +46,11 @@ describe("account suspension", () => {
     expect(result.response.status).toBe(200);
     expect(result.body.suspendedAt).not.toBeNull();
 
-    const dashboard = await (await app.request("/dashboard", { cookie: business.cookie })).text();
-    expect(dashboard).toContain("Log in with your email code");
+    const dashboard = await app.request("/dashboard", { cookie: business.cookie });
+    expect(dashboard.status).toBe(303);
+    expect(new URL(dashboard.headers.get("location") ?? "", "http://x.test").pathname).toBe(
+      "/login",
+    );
 
     // request-code still answers 200 (no enumeration), but sends no code.
     const requested = await app.request("/api/auth/request-code", {

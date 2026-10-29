@@ -250,4 +250,35 @@ describe("account API tokens", () => {
       401,
     );
   });
+
+  // The app calls applying "apply"; the job page calls it "interests". Both
+  // have to reach the same record or interest declared in the app is lost.
+  it("lets a coder apply from the app with a bearer token", async () => {
+    const app = newApp();
+    const business = await app.signIn("poster@apply.test", "business");
+    const coder = await app.signIn("applier@apply.test", "coder");
+    const profile = await createCoderProfile(app, coder.cookie, {
+      displayName: "Ada",
+      skills: "TypeScript",
+    });
+    await approveCoder(app, profile.id);
+    const job = await createJob(app, business.cookie, { skills: "TypeScript" });
+    const token = await createToken(app, coder.cookie);
+
+    const applied = await app.request(`/api/jobs/${job.id}/apply`, {
+      method: "POST",
+      headers: bearer(token.token),
+      body: { message: "Interested, from the app." },
+    });
+
+    expect(applied.status).toBe(201);
+    // Only the poster can read a job's applications, which is also how the
+    // business sees interest the coder declared from the app.
+    const listed = await app.json<{ count: number; interests: { message: string }[] }>(
+      `/api/jobs/${job.id}/interests`,
+      { cookie: business.cookie },
+    );
+    expect(listed.body.count).toBe(1);
+    expect(listed.body.interests[0]?.message).toBe("Interested, from the app.");
+  });
 });

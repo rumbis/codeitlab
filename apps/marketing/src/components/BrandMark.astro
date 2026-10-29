@@ -1,0 +1,35 @@
+---
+// The CodeItLab mark, taken from the brand asset codeitlab.com serves as its own
+// favicon and touch icon. Inlined rather than linked so it inherits currentColor
+// and costs no extra request on a page whose first paint we care about.
+interface Props {
+  class?: string;
+  size?: number;
+}
+const { class: className, size = 20 } = Astro.props;
+---
+
+<svg
+  class={className}
+  xmlns="http://www.w3.org/2000/svg"
+  width={size}
+  height={size}
+  viewBox="0 0 24 24"
+  fill="none"
+  role="presentation"
+  aria-hidden="true"
+>
+  <path d="M14.2 2.29L16.9 5.32" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
+  <path d="M3.5 13.5L2 12" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
+  <path d="M10.1 21.71L7.1 18.68" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
+  <path d="M12 2L13.5 3.5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
+  <path d="M18.7 8.5L21.8 5.4" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
+  <path d="M20.5 13.5L22 12" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
+  <path d="M14.2 21.71L16.9 18.68" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
+  <path d="M12 22L10.5 20.5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
+  <path d="M5.3 8.5L2.2 5.4" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
+  <path d="M8 8l-2 4l2 4" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
+  <path d="M16 8l2 4l-2 4" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
+  <path d="M9.9 19.42L4.6 15.77" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
+  <path d="M14.1 19.42L19.4 15.77" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
+</svg>

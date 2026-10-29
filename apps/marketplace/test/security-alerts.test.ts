@@ -111,9 +111,11 @@ describe("admin session revocation", () => {
     expect(revoked.response.status).toBe(200);
     expect(revoked.body.revoked).toBe(2);
 
-    const after = await (await app.request("/dashboard", { cookie: first.cookie })).text();
-    expect(after).toContain("Log in with your email code");
-    expect(after).not.toContain("revoke@email.test");
+    // A revoked cookie is no session at all, so the dashboard now bounces to the
+    // log-in page rather than rendering a shell that says "log in".
+    const after = await app.request("/dashboard", { cookie: first.cookie });
+    expect(after.status).toBe(303);
+    expect(new URL(after.headers.get("location") ?? "", "http://x.test").pathname).toBe("/login");
 
     const audit = await app.json<{ entries: { action: string; targetId: string }[] }>(
       "/api/admin/audit",

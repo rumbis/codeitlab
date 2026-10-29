@@ -22,7 +22,7 @@ const coderSteps = [
   },
   {
     title: "Deliver and get paid",
-    body: "Accept the engagement, do the work, and mark it delivered. When the business approves it, the platform pays you the engagement amount minus the 15% fee.",
+    body: "Accept the engagement, do the work, and mark it delivered. When the business approves it, the platform pays you the engagement amount minus the platform fee: 15% standard, 20% assisted.",
   },
 ] as const;
 
@@ -41,7 +41,7 @@ const businessSteps = [
   },
   {
     title: "Approve and release",
-    body: "Review the delivered work, approve it, and the platform pays the coder minus the 15% fee. Cancel and dispute are explicit states, not silent edits.",
+    body: "Review the delivered work, approve it, and the platform pays the coder minus the platform fee (15% standard, 20% assisted). Cancel and dispute are explicit states, not silent edits.",
   },
 ] as const;
 
@@ -52,11 +52,11 @@ const faqs = [
   },
   {
     q: "Is the app free?",
-    a: "Yes. CodeItLab is free to install and use. The marketplace is how the platform makes money: it takes a 15% fee out of paid marketplace work, not a subscription.",
+    a: "Yes. CodeItLab is free to install and use. The marketplace is how the platform makes money: it takes a fee out of paid marketplace work (15% standard, 20% assisted), not a subscription.",
   },
   {
-    q: "Who pays the 15% fee?",
-    a: "The business is charged the full engagement amount when it picks a coder. When the work is approved, the platform keeps 15% and pays the coder the rest. You will see the amount before you commit.",
+    q: "Who pays the fee?",
+    a: "The business is charged the full engagement amount when it picks a coder. When the work is approved, the platform keeps the fee — 15% on a standard job, 20% on an assisted one — and pays the coder the rest. You will see the amount before you commit.",
   },
   {
     q: "When does money change hands?",
@@ -79,7 +79,7 @@ const faqs = [
 
 <Layout
   title="Marketplace — CodeItLab"
-  description="The CodeItLab marketplace: vibe coders declare interest and get matched to paid work by skills. Businesses post jobs, see ranked recommendations, and pay after approval. 15% platform fee. The app is free."
+  description="The CodeItLab marketplace: vibe coders declare interest and get matched to paid work by skills. Businesses post jobs, see ranked recommendations, and pay after approval. 15% standard platform fee, 20% assisted. The app is free."
 >
   <!-- ── Hero ──────────────────────────────────────────────────── -->
   <section class="market-hero">
@@ -97,15 +97,16 @@ const faqs = [
         approval.
       </p>
       <div class="market-hero-actions" data-rise style="--d:280ms">
-        <a class="btn btn-primary btn-lg" href={MARKETPLACE_JOIN_URL}>
-          Become a vibe coder
+        <a class="btn btn-primary btn-lg" href={APP_URL}>
+          Get the free app
         </a>
-        <a class="btn btn-ghost btn-lg" href={MARKETPLACE_JOBS_URL}>
-          Hire a vibe coder
+        <a class="btn btn-ghost btn-lg" href={MARKETPLACE_JOIN_URL}>
+          Become a vibe coder
         </a>
       </div>
       <p class="market-hero-note" data-rise style="--d:360ms">
-        Free app · 15% platform fee on paid work · the business pays
+        Free app · 15% standard / 20% assisted fee on paid work · the business pays ·
+        <a href={MARKETPLACE_JOBS_URL}>hire a vibe coder</a>
       </p>
     </div>
   </section>
@@ -180,11 +181,12 @@ const faqs = [
           The business pays when it picks a coder, not when the work is done.
           CodeItLab holds the money, and the coder is paid after the business
           approves the delivered work. The platform fee is 15% of the engagement
-          amount. There is no subscription for either side.
+          amount, or 20% when the job is assisted and CodeItLab helps run it. There
+          is no subscription for either side.
         </p>
       </div>
 
-      <div class="money-card tile" aria-label="Money flow: business pays the platform, the platform holds the amount in escrow, and the coder is paid the amount minus the 15% fee after approval.">
+      <div class="money-card tile" aria-label="Money flow: business pays the platform, the platform holds the amount in escrow, and the coder is paid the amount minus the platform fee (15% standard, 20% assisted) after approval.">
         <div class="money-card-head">
           <span></span><span></span><span></span>
           <span class="money-card-title">escrow / flow</span>
@@ -201,12 +203,12 @@ const faqs = [
             <span class="money-label">platform</span>
             <span class="money-arrow" aria-hidden="true">→</span>
             <span class="money-label">coder</span>
-            <span class="money-amount money-amount--ok">amount − 15%</span>
+            <span class="money-amount money-amount--ok">amount − fee</span>
           </div>
           <div class="money-note">paid after the business approves</div>
           <div class="money-fee">
-            <span class="money-fee-value">15%</span>
-            <span>platform fee, deducted from the engagement amount</span>
+            <span class="money-fee-value">15% / 20%</span>
+            <span>platform fee (standard / assisted), deducted from the engagement amount</span>
           </div>
         </div>
       </div>

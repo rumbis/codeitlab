@@ -236,6 +236,16 @@ svg {
   padding-block: 0.5rem 1.5rem;
 }
 
+/* Secondary links under the hero. The app is the headline action; these stay
+   visible but quiet so they never compete with it. */
+.hero-note {
+  margin: 0.85rem 0 0;
+  color: var(--muted);
+  font-size: 0.92rem;
+  line-height: 1.5;
+  max-width: 62ch;
+}
+
 .eyebrow {
   margin: 0 0 0.35rem;
   color: var(--muted);

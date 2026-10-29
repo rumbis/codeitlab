@@ -6,7 +6,7 @@ import { loadReputationSummaries, reputationFrom } from "../server/reputation.ts
 import type { AccountRow } from "../server/types.ts";
 import { coderCard, emptyState, money, selectField } from "./components.ts";
 import { escapeHtml } from "./escape.ts";
-import { flashFrom, layout, pageUrl } from "./layout.ts";
+import { appDownloadUrl, flashFrom, layout, pageUrl } from "./layout.ts";
 
 const LEVEL_RANK = { new: 0, proven: 1, trusted: 2, expert: 3 } as const;
 
@@ -90,6 +90,7 @@ export function renderCoders(ctx: AppContext, account: AccountRow | null, url: U
     <p class="eyebrow">Coder directory</p>
     <h1>Approved coders</h1>
     <p class="lead">Every profile below has been reviewed. Rates are the coder's own range; the engagement amount is agreed per job.</p>
+    <p><a class="button" href="${escapeHtml(appDownloadUrl)}">Get the app to message a coder</a></p>
     <form class="filter-form" method="get" action="${escapeHtml(pageUrl(ctx.basePath, "/coders"))}">
       <p class="field">
         <label for="skills-filter">Filter by skills</label>

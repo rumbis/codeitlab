@@ -26,11 +26,35 @@ function newApp(overrides: Parameters<typeof createTestApp>[0] = {}): TestApp {
 describe("server-rendered pages", () => {
   it("serves every page and the stylesheet without JavaScript", async () => {
     const app = newApp();
-    for (const path of ["/", "/coders", "/jobs", "/join", "/login", "/dashboard"]) {
+    for (const path of ["/", "/coders", "/jobs", "/join", "/login"]) {
       const response = await app.request(path);
       expect(response.status, path).toBe(200);
       expect(response.headers.get("content-type")).toContain("text/html");
     }
+
+    // The dashboard is one account's own position, so a visitor without a
+    // session is sent to the log-in page instead of an empty dashboard.
+    const dashboard = await app.request("/dashboard");
+    expect(dashboard.status).toBe(303);
+    const dashboardLocation = new URL(dashboard.headers.get("location") ?? "", "http://x.test");
+    expect(dashboardLocation.pathname).toBe("/login");
+    // The log-in page has to know where to send them back, or signing in for a
+    // specific page always dumps the account on the dashboard instead.
+    expect(dashboardLocation.searchParams.get("redirectTo")).toBe("/dashboard");
+
+    // A signed-in-visitor URL that is not a redirect target must not be able to
+    // walk the log-in form off the site.
+    const loginWithOutside = await app.request(
+      "/login?redirectTo=" + encodeURIComponent("https://evil.example/steal"),
+    );
+    const loginHtml = await loginWithOutside.text();
+    expect(loginHtml).not.toContain("evil.example");
+    expect(loginHtml).toContain('value="/dashboard"');
+
+    const loginWithInside = await app.request(
+      "/login?redirectTo=" + encodeURIComponent("/jobs?tag=hiring"),
+    );
+    expect(await loginWithInside.text()).toContain('value="/jobs?tag=hiring"');
 
     const home = await app.request("/");
     const homeHtml = await home.text();

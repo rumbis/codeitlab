@@ -1,6 +1,7 @@
 ---
 import { getImage, Image } from "astro:assets";
 import appIcon from "../assets/icon.webp";
+import BrandMark from "../components/BrandMark.astro";
 import socialCard from "../assets/social-card.webp";
 import dmSansLatinUrl from "../assets/fonts/dm-sans-latin.woff2?url";
 import "../styles/fonts.css";
@@ -77,7 +78,7 @@ const canonicalUrl = new URL(Astro.url.pathname, Astro.site);
       <nav class="nav">
         <div class="nav-inner">
           <a href="/" class="nav-brand" aria-label="CodeItLab home">
-            <span class="nav-brand-mark" aria-hidden="true">&gt;_</span>
+            <BrandMark class="nav-brand-mark" size={18} />
             <span class="nav-brand-name">CodeItLab</span>
           </a>
           <div class="nav-right">
@@ -91,7 +92,7 @@ const canonicalUrl = new URL(Astro.url.pathname, Astro.site);
             >
               GitHub
             </a>
-            <a class="btn btn-primary nav-install" href={APP_URL}>Install the app</a>
+            <a class="btn btn-primary nav-install" href={APP_URL}>Get the free app</a>
           </div>
         </div>
       </nav>
@@ -368,8 +369,8 @@ const canonicalUrl = new URL(Astro.url.pathname, Astro.site);
 
   .nav-brand {
     display: inline-flex;
-    align-items: baseline;
-    gap: 4px;
+    align-items: center;
+    gap: 8px;
     color: var(--fg);
     transition: color 0.2s ease;
   }
@@ -378,14 +379,12 @@ const canonicalUrl = new URL(Astro.url.pathname, Astro.site);
     color: #fff;
   }
 
+  /* The mark is monochrome: it takes the brand teal and, on hover, follows the
+     link's own colour so it never stays a mismatched hue next to white text. */
   .nav-brand-mark {
-    font-family: var(--font-mono);
-    font-size: 15px;
-    font-weight: 600;
-    letter-spacing: -0.06em;
     color: var(--accent);
-    line-height: 1;
     flex: none;
+    display: block;
   }
 
   .nav-brand-name {
